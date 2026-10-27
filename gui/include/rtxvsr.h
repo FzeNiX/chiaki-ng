@@ -17,6 +17,16 @@ class RtxVsr
 public:
     static bool compiledIn();
 
+    // RTX VSR modes, passed to NGX as VSR.QualityLevel. 1-4 upscale (any
+    // nvngx_vsr.dll); the artifact reduction (8-11, output at input size) and
+    // streaming modes (21/23, upscale + artifact cleanup, RTX 30 series or
+    // newer) need nvngx_vsr.dll 1.8.2 / 1.8.3 or newer (NVIDIA VFX SDK 1.2/1.3).
+    static bool isValidQuality(int quality);
+    // Whether the mode keeps the input resolution instead of upscaling.
+    static bool keepsResolution(int quality);
+    // Short human readable name of a mode, e.g. "High" or "AR Medium".
+    static const char *qualityName(int quality);
+
     // Appends the Vulkan instance/device extensions NGX needs. They must be
     // requested as *optional* extensions before the instance/device is created.
     static void appendRequiredExtensions(std::vector<const char *> &instance_exts,
@@ -38,10 +48,11 @@ public:
     // called before the pl_vulkan device is destroyed.
     void destroy();
 
-    // Upscales `src` to `out_w` x `out_h`. On success `out_frame` describes an
-    // RGB texture owned by this object, valid at least until `process` is
-    // called for more distinct frames than the internal cache holds.
-    // `quality` is the RTX VSR quality level (1 = low .. 4 = ultra).
+    // Upscales `src` to `out_w` x `out_h` (or cleans it up at its own size for
+    // modes that keep the resolution). On success `out_frame` describes an RGB
+    // texture owned by this object, valid at least until `process` is called
+    // for more distinct frames than the internal cache holds. `quality` is one
+    // of the modes accepted by isValidQuality().
     bool process(const struct pl_frame *src, uint64_t signature,
                  int out_w, int out_h, int quality,
                  struct pl_frame *out_frame, uint64_t *out_signature);

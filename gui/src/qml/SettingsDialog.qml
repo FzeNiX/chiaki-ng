@@ -1002,11 +1002,17 @@ DialogView {
                     C.ComboBox {
                         Layout.preferredWidth: 400
                         visible: Chiaki.settings.rtxVsrSupported
-                        model: [qsTr("Off"), qsTr("Low"), qsTr("Medium"), qsTr("High"), qsTr("Ultra")]
-                        currentIndex: Chiaki.settings.rtxVsrQuality
-                        onActivated: index => Chiaki.settings.rtxVsrQuality = index
+                        // NGX VSR.QualityLevel for each entry
+                        readonly property var modes: [0, 1, 2, 3, 4, 8, 9, 10, 11, 21, 23]
+                        model: [qsTr("Off"),
+                            qsTr("Upscale Low"), qsTr("Upscale Medium"), qsTr("Upscale High"), qsTr("Upscale Ultra"),
+                            qsTr("Artifact Reduction Low"), qsTr("Artifact Reduction Medium"),
+                            qsTr("Artifact Reduction High"), qsTr("Artifact Reduction Ultra"),
+                            qsTr("Streaming Medium (RTX 30+)"), qsTr("Streaming Ultra (RTX 30+)")]
+                        currentIndex: Math.max(0, modes.indexOf(Chiaki.settings.rtxVsrQuality))
+                        onActivated: index => Chiaki.settings.rtxVsrQuality = modes[index]
                         ToolTip.visible: hovered
-                        ToolTip.text: qsTr("Upscales SDR streams with NVIDIA RTX Video (RTX 20 series or newer, Vulkan renderer).\nRequires nvngx_vsr.dll from the NVIDIA RTX Video SDK next to chiaki.exe.")
+                        ToolTip.text: qsTr("NVIDIA RTX Video on SDR streams (RTX 20 series or newer, Vulkan renderer). Needs nvngx_vsr.dll next to chiaki.exe.\nUpscale: sharper picture when the window is larger than the stream.\nArtifact Reduction: removes compression blocking and banding at stream resolution.\nStreaming: upscale plus artifact cleanup for compressed streams.\nArtifact Reduction and Streaming need nvngx_vsr.dll 1.8.2 or newer (NVIDIA VFX SDK 1.2/1.3).")
                     }
 
                     Label {

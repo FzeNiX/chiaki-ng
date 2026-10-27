@@ -5276,10 +5276,9 @@ renderer_backend_ready:
         }
 
         QStringList parts;
-        static const char *const vsr_levels[] = { "", "Low", "Medium", "High", "Ultra" };
         const int vsr_quality = vsr_status_quality.loadRelaxed();
-        if (vsr_quality > 0 && vsr_quality <= 4 && rtx_vsr) {
-            QString part = QStringLiteral("RTX VSR %1").arg(QLatin1String(vsr_levels[vsr_quality]));
+        if (RtxVsr::isValidQuality(vsr_quality) && rtx_vsr) {
+            QString part = QStringLiteral("RTX VSR %1").arg(QLatin1String(RtxVsr::qualityName(vsr_quality)));
             if (rtx_vsr->gpuTimeMs() > 0.0f)
                 part += QStringLiteral(" %1 ms").arg(rtx_vsr->gpuTimeMs(), 0, 'f', 1);
             parts << part;
@@ -7620,7 +7619,7 @@ void QmlMainWindow::render()
         fg_status_multiplier.storeRelaxed(fg_applied ? fg_active_multiplier : 0);
     }
 
-    if (vsr_applied || fg_applied) {
+    if ((vsr_applied && !RtxVsr::keepsResolution(rtx_vsr_quality)) || fg_applied) {
         // The frame already is at display size; skip the shader upscalers.
         params.hooks = nullptr;
         params.num_hooks = 0;
@@ -7631,7 +7630,7 @@ void QmlMainWindow::render()
     }
     // Generated frames reuse the last stream frame's VSR state.
     if (!fg_override)
-        vsr_status_quality.storeRelaxed(vsr_applied ? qBound(1, rtx_vsr_quality, 4) : 0);
+        vsr_status_quality.storeRelaxed(vsr_applied ? rtx_vsr_quality : 0);
     const struct pl_frame_mix *render_frame_mix = vsr_applied ? &vsr_frame_mix : &frame_mix;
 
     const qint64 render_setup_ready_us = static_cast<qint64>(chiaki_time_now_monotonic_us());

@@ -516,9 +516,11 @@ class Settings : public QObject
 		PlaceboFrameMixer GetPlaceboFrameMixer() const;
 		bool GetDirectFrameMapping() const { return settings.value("settings/direct_frame_mapping", true).toBool(); }
 		void SetDirectFrameMapping(bool enabled) { settings.setValue("settings/direct_frame_mapping", enabled); }
-		// RTX Video Super Resolution quality: 0 = off, 1 = low .. 4 = ultra
-		int GetRtxVsrQuality() const { return qBound(0, settings.value("settings/rtx_vsr_quality", 0).toInt(), 4); }
-		void SetRtxVsrQuality(int quality) { settings.setValue("settings/rtx_vsr_quality", qBound(0, quality, 4)); }
+		// RTX Video mode passed to NGX as VSR.QualityLevel: 0 = off, 1-4 = upscale,
+		// 8-11 = artifact reduction, 21/23 = streaming (see RtxVsr::isValidQuality)
+		int GetRtxVsrQuality() const { return ValidRtxVsrQuality(settings.value("settings/rtx_vsr_quality", 0).toInt()); }
+		void SetRtxVsrQuality(int quality) { settings.setValue("settings/rtx_vsr_quality", ValidRtxVsrQuality(quality)); }
+		static int ValidRtxVsrQuality(int q) { return ((q >= 1 && q <= 4) || (q >= 8 && q <= 11) || q == 21 || q == 23) ? q : 0; }
 		// Frame generation backend: 0 = off, 1 = DLSS Frame Generation, 2 = FSR 3.1 Frame Generation
 		int GetFrameGenBackend() const { return qBound(0, settings.value("settings/frame_gen_backend", 0).toInt(), 2); }
 		void SetFrameGenBackend(int backend) { settings.setValue("settings/frame_gen_backend", qBound(0, backend, 2)); }

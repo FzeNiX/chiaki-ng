@@ -6,6 +6,33 @@
 
 Q_DECLARE_LOGGING_CATEGORY(chiakiGui);
 
+bool RtxVsr::isValidQuality(int quality)
+{
+    return (quality >= 1 && quality <= 4) || (quality >= 8 && quality <= 11) || quality == 21 || quality == 23;
+}
+
+bool RtxVsr::keepsResolution(int quality)
+{
+    return quality >= 8 && quality <= 15;
+}
+
+const char *RtxVsr::qualityName(int quality)
+{
+    switch (quality) {
+    case 1: return "Low";
+    case 2: return "Medium";
+    case 3: return "High";
+    case 4: return "Ultra";
+    case 8: return "AR Low";
+    case 9: return "AR Medium";
+    case 10: return "AR High";
+    case 11: return "AR Ultra";
+    case 21: return "Streaming Medium";
+    case 23: return "Streaming Ultra";
+    default: return "Off";
+    }
+}
+
 #if defined(CHIAKI_HAVE_NGX)
 
 #include <vulkan/vulkan.h>
@@ -591,17 +618,23 @@ bool RtxVsr::process(const struct pl_frame *src, uint64_t signature,
     const int in_h = static_cast<int>(std::lround(std::fabs(pl_rect_h(src->crop))));
     if (in_w <= 0 || in_h <= 0)
         return false;
-    out_w = std::min(out_w, in_w * kMaxScale);
-    out_h = std::min(out_h, in_h * kMaxScale);
-    if (out_w <= in_w || out_h <= in_h)
+    if (!isValidQuality(quality))
         return false;
-    quality = std::clamp(quality, 1, 4);
+    if (keepsResolution(quality)) {
+        out_w = in_w;
+        out_h = in_h;
+    } else {
+        out_w = std::min(out_w, in_w * kMaxScale);
+        out_h = std::min(out_h, in_h * kMaxScale);
+        if (out_w <= in_w || out_h <= in_h)
+            return false;
+    }
 
     // Mix the target geometry into the key so a resize never reuses stale output.
     const uint64_t key = signature
         ^ (static_cast<uint64_t>(out_w) * 0x9E3779B97F4A7C15ull)
         ^ (static_cast<uint64_t>(out_h) << 32)
-        ^ (static_cast<uint64_t>(quality) << 60);
+        ^ (static_cast<uint64_t>(quality) << 56);
 
     auto fill_frame = [&](Impl::CacheEntry &entry) {
         entry.last_use = ++d.use_counter;
@@ -657,6 +690,9 @@ bool RtxVsr::process(const struct pl_frame *src, uint64_t signature,
         // Don't retry (and log) every frame if the feature keeps failing.
         if (++d.eval_failures >= 3) {
             qCWarning(chiakiGui) << "[rtx-vsr] Disabling RTX Video Super Resolution after repeated failures";
+            if (quality > 4)
+                qCWarning(chiakiGui) << "[rtx-vsr] The" << qualityName(quality)
+                                     << "mode needs nvngx_vsr.dll 1.8.2 or newer (NVIDIA VFX SDK 1.2/1.3); streaming modes also need an RTX 30 series or newer GPU";
             d.initialized = false;
             d.init_failed = true;
         }

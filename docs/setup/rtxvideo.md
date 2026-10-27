@@ -16,12 +16,24 @@ of latency).
   copied next to `chiaki.exe`. The SDK is a free download with an NVIDIA developer
   account; the DLL is not bundled with chiaki-ng.
 
+## Modes
+
+| Mode | What it does | nvngx_vsr.dll |
+|---|---|---|
+| Upscale Low … Ultra | AI upscaling when the window is larger than the stream | any (RTX Video SDK 1.1 ships 1.6.0) |
+| Artifact Reduction Low … Ultra | removes compression blocking and banding at stream resolution; libplacebo scales afterwards | 1.8.2 or newer (NVIDIA VFX SDK 1.2+) |
+| Streaming Medium / Ultra | upscaling plus artifact cleanup tuned for compressed streams, RTX 30 series or newer | 1.8.3 or newer (NVIDIA VFX SDK 1.3+) |
+
+If a mode is not supported by the installed DLL or GPU, VSR turns itself off for
+the session and the log says which version is needed.
+
 ## Usage
 
 1. Copy `nvngx_vsr.dll` (x64 release build from the SDK) into the chiaki-ng folder.
-2. Settings → Video → **RTX Video Super Resolution**: pick `Low`, `Medium`, `High` or `Ultra`.
-3. Start a stream. VSR is only used when the window/screen is larger than the
-   stream resolution (e.g. 1080p stream on a 1440p/4K monitor).
+2. Settings → Video → **RTX Video Super Resolution**: pick a mode (see above).
+3. Start a stream. Upscale and Streaming modes are only used when the window/screen
+   is larger than the stream resolution (e.g. 1080p stream on a 1440p/4K monitor).
+   The stream stats overlay shows the active mode and its GPU time.
 
 The log tells you what happened:
 
