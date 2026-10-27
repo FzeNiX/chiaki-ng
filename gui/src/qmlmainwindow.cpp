@@ -1,5 +1,6 @@
 #include "qmlmainwindow.h"
 #include "rtxvsr.h"
+#include "framegen.h"
 #include "qmlbackend.h"
 #include "qmlsvgprovider.h"
 #include "chiaki/log.h"
@@ -2669,6 +2670,8 @@ QmlMainWindow::~QmlMainWindow()
     }
     pl_cache_destroy(&placebo_cache);
     pl_queue_destroy(&placebo_queue);
+    delete frame_gen;
+    frame_gen = nullptr;
     delete rtx_vsr;
     rtx_vsr = nullptr;
     pl_renderer_destroy(&placebo_renderer);
@@ -5064,6 +5067,8 @@ renderer_backend_ready:
     );
     if (render_backend == RenderBackend::Vulkan && RtxVsr::compiledIn())
         rtx_vsr = new RtxVsr(placebo_log);
+    if (render_backend == RenderBackend::Vulkan && FrameGen::compiledIn())
+        frame_gen = new FrameGen(placebo_log);
 
     placebo_queue = pl_queue_create(placeboGpu());
 
@@ -6663,9 +6668,10 @@ void QmlMainWindow::render()
     const double present_interval_s = refresh_interval_s;
     const bool stream_active = stream_session_active.loadAcquire() != 0;
     const bool timer_owned_playback = stream_active && mixer_active;
+    // With frame generation every stream frame is presented as several frames.
     const double present_submit_interval_s = timer_owned_playback
         ? present_interval_s
-        : stream_interval_s;
+        : stream_interval_s / qMax(1, fg_active_multiplier);
     const qint64 present_interval_us = static_cast<qint64>(qMax(1.0, vsync_duration * 1000000.0) + 0.5);
     const bool pending_overflow_waiting = hasPendingFrameOverflow();
     const bool pending_frame_waiting = snapshotQueueDepth() >= effectiveQueueDepthLimit() || hasPendingFrame();
@@ -6688,7 +6694,36 @@ void QmlMainWindow::render()
     struct pl_frame direct_render_frame = {};
     const struct pl_frame *direct_frames[] = { &direct_render_frame };
     const float direct_timestamps[] = { 0.0f };
-    if (bypass_frame_queue) {
+    // Set when this render presents a frame left over from frame generation.
+    struct pl_frame fg_override_frame = {};
+    bool fg_override = false;
+    bool direct_frame_fresh = false;
+    if (bypass_frame_queue && !fg_pending_frames.empty()) {
+        bool incoming_waiting = false;
+        {
+            QMutexLocker locker(&direct_frame_mutex);
+            incoming_waiting = direct_pending_frame != nullptr;
+        }
+        if (incoming_waiting) {
+            // A new stream frame is already waiting: drop the remaining
+            // generated frames but still show the real one.
+            fg_override_frame = fg_pending_frames.back();
+            fg_pending_frames.clear();
+        } else {
+            fg_override_frame = fg_pending_frames.front();
+            fg_pending_frames.erase(fg_pending_frames.begin());
+        }
+        fg_override = true;
+    }
+    if (bypass_frame_queue && fg_override) {
+        direct_render_frame = fg_override_frame;
+        frame_mix = {};
+        frame_mix.num_frames = 1;
+        frame_mix.frames = direct_frames;
+        frame_mix.timestamps = direct_timestamps;
+        queue_status = PL_QUEUE_OK;
+        queue_depth_before_update = 0;
+    } else if (bypass_frame_queue) {
         AVFrame *incoming = nullptr;
         bool reset_direct_frame = false;
         {
@@ -6696,6 +6731,8 @@ void QmlMainWindow::render()
             std::swap(incoming, direct_pending_frame);
             reset_direct_frame = direct_frame_reset.fetchAndStoreRelaxed(0) != 0;
         }
+        if (reset_direct_frame && frame_gen)
+            frame_gen->reset();
         if (reset_direct_frame) {
             pl_unmap_avframe(placeboGpu(), &direct_frame);
             direct_frame = {};
@@ -6714,6 +6751,7 @@ void QmlMainWindow::render()
                     backend->disableZeroCopy();
             } else {
                 direct_frame_serial++;
+                direct_frame_fresh = true;
             }
             av_frame_free(&incoming);
         }
@@ -7470,7 +7508,7 @@ void QmlMainWindow::render()
     std::array<uint64_t, kRtxVsrMaxMixFrames> vsr_signatures;
     bool vsr_applied = false;
     const int rtx_vsr_quality = rtx_vsr && has_settings ? settings->GetRtxVsrQuality() : 0;
-    if (rtx_vsr_quality > 0 && nvidia_card && stream_active && rtx_vsr->ensureInitialized(placebo_vulkan)) {
+    if (!fg_override && rtx_vsr_quality > 0 && nvidia_card && stream_active && rtx_vsr->ensureInitialized(placebo_vulkan)) {
         const int vsr_out_w = static_cast<int>(lroundf(fabsf(pl_rect_w(target_frame.crop))));
         const int vsr_out_h = static_cast<int>(lroundf(fabsf(pl_rect_h(target_frame.crop))));
         if (bypass_frame_queue) {
@@ -7496,8 +7534,55 @@ void QmlMainWindow::render()
             }
         }
     }
-    if (vsr_applied) {
-        // The RTX output already is at display size; skip the shader upscalers.
+
+    // Frame generation (Direct Mapping only): turn each new stream frame into
+    // `multiplier` frames. The first one is presented now, the rest by the
+    // following renders, spaced by the presentation throttle.
+    const int fg_backend = frame_gen && has_settings ? settings->GetFrameGenBackend() : 0;
+    if (fg_backend != fg_last_backend) {
+        fg_last_backend = fg_backend;
+        fg_pending_frames.clear();
+        fg_active_multiplier = 1;
+        if (frame_gen)
+            frame_gen->reset();
+        if (fg_backend && !bypass_frame_queue)
+            qCInfo(chiakiGui) << "Frame generation requires Direct Mapping and stays disabled";
+    }
+    bool fg_applied = fg_override;
+    if (!fg_override && direct_frame_fresh && fg_backend > 0 && stream_active && direct_render_frame.num_planes > 0) {
+        const auto backend_choice = static_cast<FrameGen::Backend>(fg_backend);
+        // More output frames than the display can show only adds latency.
+        const int refresh_cap = stream_interval_s > 0.0
+            ? static_cast<int>(std::floor(refresh_rate * stream_interval_s + 0.15))
+            : 2;
+        int multiplier = qMin(settings->GetFrameGenMultiplier(), refresh_cap);
+        if (multiplier >= 2 && frame_gen->ensureInitialized(placebo_vulkan, backend_choice)) {
+            multiplier = qMin(multiplier, frame_gen->maxMultiplier());
+            const int fg_out_w = static_cast<int>(lroundf(fabsf(pl_rect_w(target_frame.crop))));
+            const int fg_out_h = static_cast<int>(lroundf(fabsf(pl_rect_h(target_frame.crop))));
+            std::vector<struct pl_frame> fg_outputs;
+            if (multiplier >= 2 &&
+                frame_gen->process(&direct_render_frame, fg_out_w, fg_out_h, multiplier,
+                                   static_cast<float>(stream_interval_s * 1000.0), fg_outputs) &&
+                !fg_outputs.empty()) {
+                direct_render_frame = fg_outputs.front();
+                fg_pending_frames.assign(fg_outputs.begin() + 1, fg_outputs.end());
+                if (fg_active_multiplier != multiplier)
+                    qCInfo(chiakiGui) << "Frame generation active:" << FrameGen::backendName(backend_choice)
+                                      << multiplier << "x";
+                fg_active_multiplier = multiplier;
+                fg_applied = true;
+            }
+        }
+    }
+    if (direct_frame_fresh && !fg_applied && fg_active_multiplier != 1) {
+        qCInfo(chiakiGui) << "Frame generation inactive";
+        fg_active_multiplier = 1;
+        fg_pending_frames.clear();
+    }
+
+    if (vsr_applied || fg_applied) {
+        // The frame already is at display size; skip the shader upscalers.
         params.hooks = nullptr;
         params.num_hooks = 0;
     }
@@ -7561,7 +7646,9 @@ void QmlMainWindow::render()
     if (!scheduled_pending)
         schedulePostRenderWork();
     schedulePostSwapchainRecreateRefresh();
-
+    // Frames left over from frame generation are presented by the next renders.
+    if (!fg_pending_frames.empty())
+        scheduleUpdate(false, UpdateRequestReason::PendingFrame);
 }
 
 bool QmlMainWindow::handleShortcut(QKeyEvent *event)

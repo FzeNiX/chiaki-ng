@@ -9,7 +9,7 @@
 #include <vector>
 
 // NVIDIA RTX Video Super Resolution (VSR) running on libplacebo's Vulkan device
-// through NGX. Only functional in builds configured with CHIAKI_ENABLE_RTX_VSR
+// through NGX. Only functional in builds configured with CHIAKI_ENABLE_NGX
 // (Windows + NVIDIA NGX SDK); otherwise every call is a cheap no-op that
 // reports VSR as unavailable so callers can fall back to libplacebo scaling.
 class RtxVsr

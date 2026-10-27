@@ -159,13 +159,22 @@ jobs:
         run: |
           git apply --ignore-whitespace --verbose --directory=third-party/gf-complete/ scripts/windows-vc/gf-complete.patch
 
-      - name: Fetch NVIDIA NGX SDK (RTX Video Super Resolution)
+      - name: Fetch NVIDIA NGX SDK (RTX Video Super Resolution, DLSS Frame Generation)
         run: |
           git clone --depth 1 --filter=blob:none --no-checkout https://github.com/NVIDIA/DLSS.git ngx-sdk
           cd ngx-sdk
-          git sparse-checkout set --no-cone /include/ /lib/Windows_x86_64/x64/nvsdk_ngx_d.lib /LICENSE.txt
+          git sparse-checkout set --no-cone /include/ /lib/Windows_x86_64/x64/nvsdk_ngx_d.lib /lib/Windows_x86_64/rel/nvngx_dlssg.dll /LICENSE.txt
           git checkout
           if (-not (Test-Path "lib\Windows_x86_64\x64\nvsdk_ngx_d.lib")) { throw "NGX library missing" }
+          if (-not (Test-Path "lib\Windows_x86_64\rel\nvngx_dlssg.dll")) { throw "DLSS Frame Generation runtime missing" }
+
+      - name: Fetch AMD FidelityFX SDK (FSR 3.1 Frame Generation)
+        run: |
+          git clone --depth 1 --branch v1.1.4 --filter=blob:none --no-checkout https://github.com/GPUOpen-LibrariesAndSDKs/FidelityFX-SDK.git ffx-sdk
+          cd ffx-sdk
+          git sparse-checkout set --no-cone /ffx-api/include/ /PrebuiltSignedDLL/amd_fidelityfx_vk.dll /LICENSE.txt
+          git checkout
+          if (-not (Test-Path "PrebuiltSignedDLL\amd_fidelityfx_vk.dll")) { throw "FidelityFX runtime missing" }
 
       - name: Configure chiaki-ng
         run: |
@@ -179,8 +188,10 @@ jobs:
           -DCHIAKI_ENABLE_CLI=OFF `
           -DCHIAKI_GUI_ENABLE_SDL_GAMECONTROLLER=ON `
           -DCHIAKI_ENABLE_STEAMDECK_NATIVE=OFF `
-          -DCHIAKI_ENABLE_RTX_VSR=ON `
+          -DCHIAKI_ENABLE_NGX=ON `
           -DCHIAKI_NGX_SDK_DIR="${{ github.workspace }}\ngx-sdk" `
+          -DCHIAKI_ENABLE_FFX=ON `
+          -DCHIAKI_FFX_SDK_DIR="${{ github.workspace }}\ffx-sdk" `
           -DPYTHON_EXECUTABLE="${{ env.pythonLocation }}\python.exe" `
           -DCMAKE_PREFIX_PATH="${{ github.workspace }}\${{ env.dep_folder }};${{ env.VULKAN_SDK }}"
 
@@ -205,6 +216,12 @@ jobs:
           cp "${{ github.workspace }}\${{ env.dep_folder }}\bin\libplacebo-*.dll" chiaki-ng-Win
           cp "${{ github.workspace }}\${{ env.dep_folder }}\bin\shaderc_shared.dll" chiaki-ng-Win
           cp "${{ github.workspace }}\${{ env.dep_folder }}\bin\spirv-cross-c-shared.dll" chiaki-ng-Win
+          # Frame generation runtimes (redistributable parts of the NVIDIA DLSS SDK and the AMD FidelityFX SDK)
+          cp "${{ github.workspace }}\ngx-sdk\lib\Windows_x86_64\rel\nvngx_dlssg.dll" chiaki-ng-Win
+          cp "${{ github.workspace }}\ffx-sdk\PrebuiltSignedDLL\amd_fidelityfx_vk.dll" chiaki-ng-Win
+          mkdir chiaki-ng-Win\licenses
+          cp "${{ github.workspace }}\ngx-sdk\LICENSE.txt" chiaki-ng-Win\licenses\NVIDIA-DLSS-SDK-LICENSE.txt
+          cp "${{ github.workspace }}\ffx-sdk\LICENSE.txt" chiaki-ng-Win\licenses\AMD-FidelityFX-SDK-LICENSE.txt
           windeployqt.exe --no-translations --qmldir=gui\src\qml --release chiaki-ng-Win\chiaki.exe
 
       - name: Package chiaki-ng

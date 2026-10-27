@@ -9,6 +9,7 @@
 #include <QQuickWindow>
 #include <QLoggingCategory>
 #include <deque>
+#include <vector>
 #include <atomic>
 
 extern "C" {
@@ -44,6 +45,7 @@ class QOffscreenSurface;
 class QOpenGLContext;
 class QOpenGLFramebufferObject;
 class RtxVsr;
+class FrameGen;
 class QWidget;
 class QLabel;
 class QVBoxLayout;
@@ -336,6 +338,11 @@ private:
     pl_renderer placebo_renderer = {};
     RtxVsr *rtx_vsr = nullptr;
     bool rtx_vsr_active = false;
+    FrameGen *frame_gen = nullptr;
+    // Frames still to be presented for the last stream frame: generated ones first, the real one last.
+    std::vector<struct pl_frame> fg_pending_frames;
+    int fg_active_multiplier = 1;
+    int fg_last_backend = 0;
     uint64_t direct_frame_serial = 0;
     pl_queue placebo_queue = {};
     std::array<pl_tex, 8> placebo_tex{};

@@ -519,6 +519,12 @@ class Settings : public QObject
 		// RTX Video Super Resolution quality: 0 = off, 1 = low .. 4 = ultra
 		int GetRtxVsrQuality() const { return qBound(0, settings.value("settings/rtx_vsr_quality", 0).toInt(), 4); }
 		void SetRtxVsrQuality(int quality) { settings.setValue("settings/rtx_vsr_quality", qBound(0, quality, 4)); }
+		// Frame generation backend: 0 = off, 1 = DLSS Frame Generation, 2 = FSR 3.1 Frame Generation
+		int GetFrameGenBackend() const { return qBound(0, settings.value("settings/frame_gen_backend", 0).toInt(), 2); }
+		void SetFrameGenBackend(int backend) { settings.setValue("settings/frame_gen_backend", qBound(0, backend, 2)); }
+		// Output frames per stream frame (2 = one generated frame per real frame)
+		int GetFrameGenMultiplier() const { return qBound(2, settings.value("settings/frame_gen_multiplier", 2).toInt(), 4); }
+		void SetFrameGenMultiplier(int multiplier) { settings.setValue("settings/frame_gen_multiplier", qBound(2, multiplier, 4)); }
 		void SetPlaceboFrameMixer(PlaceboFrameMixer frame_mixer);
 
 		bool GetPlaceboDeinterlaceEnabled() const;

@@ -1,6 +1,7 @@
 #include "qmlsettings.h"
 #include "sessionlog.h"
 #include "rtxvsr.h"
+#include "framegen.h"
 
 #include <QSet>
 #include <QKeySequence>
@@ -1008,6 +1009,47 @@ bool QmlSettings::rtxVsrSupported() const
     return RtxVsr::compiledIn();
 }
 
+int QmlSettings::frameGenBackend() const
+{
+    return settings->GetFrameGenBackend();
+}
+
+void QmlSettings::setFrameGenBackend(int backend)
+{
+    if (backend == settings->GetFrameGenBackend())
+        return;
+    settings->SetFrameGenBackend(backend);
+    emit frameGenBackendChanged();
+}
+
+int QmlSettings::frameGenMultiplier() const
+{
+    return settings->GetFrameGenMultiplier();
+}
+
+void QmlSettings::setFrameGenMultiplier(int multiplier)
+{
+    if (multiplier == settings->GetFrameGenMultiplier())
+        return;
+    settings->SetFrameGenMultiplier(multiplier);
+    emit frameGenMultiplierChanged();
+}
+
+bool QmlSettings::frameGenSupported() const
+{
+    return FrameGen::compiledIn();
+}
+
+bool QmlSettings::frameGenDlssSupported() const
+{
+    return FrameGen::backendCompiledIn(FrameGen::Backend::Dlss);
+}
+
+bool QmlSettings::frameGenFsrSupported() const
+{
+    return FrameGen::backendCompiledIn(FrameGen::Backend::Fsr);
+}
+
 void QmlSettings::setPlaceboFrameMixer(int mixer)
 {
     settings->SetPlaceboFrameMixer(static_cast<PlaceboFrameMixer>(mixer));
@@ -1927,6 +1969,8 @@ void QmlSettings::refreshAllKeys()
     emit echoSuppressLevelChanged();
 #endif
     emit rtxVsrQualityChanged();
+    emit frameGenBackendChanged();
+    emit frameGenMultiplierChanged();
     emit displayTargetContrastChanged();
     emit displayTargetPeakChanged();
     emit displayTargetPrimChanged();

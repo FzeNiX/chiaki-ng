@@ -7,7 +7,7 @@ of latency).
 
 ## Requirements
 
-- Windows 10/11 x64 build of chiaki-ng compiled with `CHIAKI_ENABLE_RTX_VSR=ON`
+- Windows 10/11 x64 build of chiaki-ng compiled with `CHIAKI_ENABLE_NGX=ON`
   (the `Build chiaki-ng Windows x86_64 (VC)` workflow does this)
 - NVIDIA GeForce RTX 20 series or newer with a current driver
 - Renderer Backend: **Vulkan**

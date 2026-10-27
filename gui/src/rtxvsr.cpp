@@ -1,14 +1,11 @@
 #include "rtxvsr.h"
+#include "ngxcore.h"
 
 #include <QLoggingCategory>
 
 Q_DECLARE_LOGGING_CATEGORY(chiakiGui);
 
-#if defined(CHIAKI_HAVE_RTX_VSR)
-
-#include <QCoreApplication>
-#include <QDir>
-#include <QStandardPaths>
+#if defined(CHIAKI_HAVE_NGX)
 
 #include <vulkan/vulkan.h>
 #include <nvsdk_ngx_vk.h>
@@ -25,34 +22,12 @@ namespace {
 // public NGX headers only name it "Reserved16". Its runtime is nvngx_vsr.dll,
 // shipped with the RTX Video SDK and looked up next to chiaki.exe.
 constexpr NVSDK_NGX_Feature kVsrFeature = NVSDK_NGX_Feature_Reserved16;
-// Arbitrary but stable project id; NGX only uses it to tell applications apart.
-constexpr const char *kNgxProjectId = "5c9a8e0e-3c0b-4c1f-9b55-6b1f6c0a7c21";
 constexpr VkImageLayout kVsrLayout = VK_IMAGE_LAYOUT_GENERAL;
 // Upscaled frames are cached per source frame so the frame mixer can reuse them.
 constexpr size_t kMaxCachedFrames = 8;
 constexpr size_t kCommandSlots = 3;
 constexpr uint64_t kWaitTimeoutNs = 2000000000ull;
 constexpr int kMaxScale = 4;
-
-const char *ngxResultString(NVSDK_NGX_Result result)
-{
-    switch (result) {
-    case NVSDK_NGX_Result_Success: return "Success";
-    case NVSDK_NGX_Result_FAIL_FeatureNotSupported: return "FeatureNotSupported";
-    case NVSDK_NGX_Result_FAIL_PlatformError: return "PlatformError";
-    case NVSDK_NGX_Result_FAIL_FeatureAlreadyExists: return "FeatureAlreadyExists";
-    case NVSDK_NGX_Result_FAIL_FeatureNotFound: return "FeatureNotFound (is nvngx_vsr.dll next to chiaki.exe?)";
-    case NVSDK_NGX_Result_FAIL_InvalidParameter: return "InvalidParameter";
-    case NVSDK_NGX_Result_FAIL_NotInitialized: return "NotInitialized";
-    case NVSDK_NGX_Result_FAIL_UnsupportedInputFormat: return "UnsupportedInputFormat";
-    case NVSDK_NGX_Result_FAIL_OutOfDate: return "OutOfDate (update the NVIDIA driver)";
-    case NVSDK_NGX_Result_FAIL_OutOfGPUMemory: return "OutOfGPUMemory";
-    case NVSDK_NGX_Result_FAIL_UnsupportedFormat: return "UnsupportedFormat";
-    case NVSDK_NGX_Result_FAIL_UnableToWriteToAppDataPath: return "UnableToWriteToAppDataPath";
-    case NVSDK_NGX_Result_FAIL_UnableToInitializeFeature: return "UnableToInitializeFeature";
-    default: return "Fail";
-    }
-}
 
 } // namespace
 
@@ -111,8 +86,6 @@ struct RtxVsr::Impl
 
     NVSDK_NGX_Parameter *params = nullptr;
     NVSDK_NGX_Handle *feature = nullptr;
-    std::wstring app_data_path;
-    std::wstring feature_path;
 
     PFN_vkGetDeviceProcAddr vkGetDeviceProcAddr = nullptr;
     PFN_vkGetDeviceQueue vkGetDeviceQueue = nullptr;
@@ -217,14 +190,6 @@ bool RtxVsr::Impl::init(pl_vulkan vk_)
     if (!renderer)
         return false;
 
-    // Feature DLLs (nvngx_vsr.dll) are searched next to the executable.
-    feature_path = QDir::toNativeSeparators(QCoreApplication::applicationDirPath()).toStdWString();
-    QString data_dir = QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation);
-    if (data_dir.isEmpty())
-        data_dir = QDir::tempPath();
-    QDir().mkpath(data_dir);
-    app_data_path = QDir::toNativeSeparators(data_dir).toStdWString();
-
     VkCommandBuffer cmd = cmd_slots[0].cmd;
     VkCommandBufferBeginInfo begin_info = {};
     begin_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
@@ -245,25 +210,13 @@ bool RtxVsr::Impl::init(pl_vulkan vk_)
 
 bool RtxVsr::Impl::initNgx(VkCommandBuffer cmd)
 {
-    const wchar_t *paths[] = { feature_path.c_str() };
-    NVSDK_NGX_FeatureCommonInfo common_info = {};
-    common_info.PathListInfo.Path = paths;
-    common_info.PathListInfo.Length = 1;
-
-    NVSDK_NGX_Result result = NVSDK_NGX_VULKAN_Init_with_ProjectID(
-        kNgxProjectId, NVSDK_NGX_ENGINE_TYPE_CUSTOM, "1.0", app_data_path.c_str(),
-        vk->instance, vk->phys_device, vk->device,
-        vk->get_proc_addr, vkGetDeviceProcAddr, &common_info, NVSDK_NGX_Version_API);
-    if (NVSDK_NGX_FAILED(result)) {
-        qCWarning(chiakiGui).nospace() << "[rtx-vsr] NGX init failed: " << ngxResultString(result)
-            << " (0x" << Qt::hex << static_cast<unsigned>(result) << ")";
+    if (!NgxCore::acquire(vk))
         return false;
-    }
     ngx_initialized = true;
 
-    result = NVSDK_NGX_VULKAN_AllocateParameters(&params);
+    NVSDK_NGX_Result result = NVSDK_NGX_VULKAN_AllocateParameters(&params);
     if (NVSDK_NGX_FAILED(result) || !params) {
-        qCWarning(chiakiGui) << "[rtx-vsr] NGX parameter allocation failed:" << ngxResultString(result);
+        qCWarning(chiakiGui) << "[rtx-vsr] NGX parameter allocation failed:" << NgxCore::resultString(result);
         params = nullptr;
         return false;
     }
@@ -272,7 +225,7 @@ bool RtxVsr::Impl::initNgx(VkCommandBuffer cmd)
 
     result = NVSDK_NGX_VULKAN_CreateFeature1(vk->device, cmd, kVsrFeature, params, &feature);
     if (NVSDK_NGX_FAILED(result) || !feature) {
-        qCWarning(chiakiGui).nospace() << "[rtx-vsr] Creating the VSR feature failed: " << ngxResultString(result)
+        qCWarning(chiakiGui).nospace() << "[rtx-vsr] Creating the VSR feature failed: " << NgxCore::resultString(result)
             << " (0x" << Qt::hex << static_cast<unsigned>(result) << ")";
         feature = nullptr;
         return false;
@@ -472,7 +425,7 @@ bool RtxVsr::Impl::evaluate(Image &out, int in_w, int in_h, int quality)
     if (ok) {
         const NVSDK_NGX_Result result = NVSDK_NGX_VULKAN_EvaluateFeature_C(slot.cmd, feature, params, nullptr);
         if (NVSDK_NGX_FAILED(result)) {
-            qCWarning(chiakiGui).nospace() << "[rtx-vsr] Evaluating VSR failed: " << ngxResultString(result)
+            qCWarning(chiakiGui).nospace() << "[rtx-vsr] Evaluating VSR failed: " << NgxCore::resultString(result)
                 << " (0x" << Qt::hex << static_cast<unsigned>(result) << ")";
             ok = false;
         }
@@ -511,7 +464,7 @@ void RtxVsr::Impl::shutdown()
         NVSDK_NGX_VULKAN_DestroyParameters(params);
     params = nullptr;
     if (ngx_initialized)
-        NVSDK_NGX_VULKAN_Shutdown1(vk->device);
+        NgxCore::release();
     ngx_initialized = false;
 
     if (vk && vkDestroyImageView) {
@@ -548,7 +501,7 @@ void RtxVsr::appendRequiredExtensions(std::vector<const char *> &instance_exts,
     const char **inst = nullptr, **dev = nullptr;
     const NVSDK_NGX_Result result = NVSDK_NGX_VULKAN_RequiredExtensions(&inst_count, &inst, &dev_count, &dev);
     if (NVSDK_NGX_FAILED(result)) {
-        qCWarning(chiakiGui) << "[rtx-vsr] Could not query NGX Vulkan extensions:" << ngxResultString(result);
+        qCWarning(chiakiGui) << "[rtx-vsr] Could not query NGX Vulkan extensions:" << NgxCore::resultString(result);
         return;
     }
     auto append_unique = [](std::vector<const char *> &list, const char *ext) {
@@ -701,7 +654,7 @@ bool RtxVsr::process(const struct pl_frame *src, uint64_t signature,
     return true;
 }
 
-#else // !CHIAKI_HAVE_RTX_VSR
+#else // !CHIAKI_HAVE_NGX
 
 struct RtxVsr::Impl {};
 
@@ -714,4 +667,4 @@ bool RtxVsr::failed() const { return true; }
 void RtxVsr::destroy() {}
 bool RtxVsr::process(const struct pl_frame *, uint64_t, int, int, int, struct pl_frame *, uint64_t *) { return false; }
 
-#endif // CHIAKI_HAVE_RTX_VSR
+#endif // CHIAKI_HAVE_NGX

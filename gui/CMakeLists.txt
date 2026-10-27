@@ -52,8 +52,12 @@ set(SOURCE_FILES
 	src/qmlsettings.cpp
 	include/qmlsvgprovider.h
 	src/qmlsvgprovider.cpp
+	include/ngxcore.h
+	src/ngxcore.cpp
 	include/rtxvsr.h
 	src/rtxvsr.cpp
+	include/framegen.h
+	src/framegen.cpp
 	include/systemdinhibit.h
 	src/systemdinhibit.cpp
 	)
@@ -102,12 +106,12 @@ target_link_libraries(chiaki PkgConfig::LIBPLACEBO placebo-libav-impl)
 
 target_link_libraries(chiaki chiaki-lib)
 
-if(CHIAKI_ENABLE_RTX_VSR)
+if(CHIAKI_ENABLE_NGX)
 	if(NOT WIN32 OR NOT MSVC)
-		message(FATAL_ERROR "CHIAKI_ENABLE_RTX_VSR requires a Windows MSVC/clang-cl build")
+		message(FATAL_ERROR "CHIAKI_ENABLE_NGX requires a Windows MSVC/clang-cl build")
 	endif()
 	if(NOT EXISTS "${CHIAKI_NGX_SDK_DIR}/include/nvsdk_ngx_vk.h")
-		message(FATAL_ERROR "CHIAKI_ENABLE_RTX_VSR requires CHIAKI_NGX_SDK_DIR pointing at the NVIDIA DLSS SDK (include/nvsdk_ngx_vk.h not found)")
+		message(FATAL_ERROR "CHIAKI_ENABLE_NGX requires CHIAKI_NGX_SDK_DIR pointing at the NVIDIA DLSS SDK (include/nvsdk_ngx_vk.h not found)")
 	endif()
 	if(CMAKE_SYSTEM_PROCESSOR MATCHES "ARM64|aarch64")
 		set(CHIAKI_NGX_LIB_ARCH "Windows_aarch64")
@@ -121,8 +125,21 @@ if(CHIAKI_ENABLE_RTX_VSR)
 	endif()
 	target_include_directories(chiaki PRIVATE "${CHIAKI_NGX_SDK_DIR}/include")
 	target_link_libraries(chiaki "${CHIAKI_NGX_LIB}" advapi32 user32)
-	target_compile_definitions(chiaki PRIVATE CHIAKI_HAVE_RTX_VSR)
-	message(STATUS "RTX Video Super Resolution enabled (NGX: ${CHIAKI_NGX_LIB})")
+	target_compile_definitions(chiaki PRIVATE CHIAKI_HAVE_NGX)
+	message(STATUS "NVIDIA NGX enabled: RTX Video Super Resolution, DLSS Frame Generation (${CHIAKI_NGX_LIB})")
+endif()
+
+if(CHIAKI_ENABLE_FFX)
+	if(NOT WIN32 OR NOT MSVC)
+		message(FATAL_ERROR "CHIAKI_ENABLE_FFX requires a Windows MSVC/clang-cl build")
+	endif()
+	if(NOT EXISTS "${CHIAKI_FFX_SDK_DIR}/ffx-api/include/ffx_api/vk/ffx_api_vk.h")
+		message(FATAL_ERROR "CHIAKI_ENABLE_FFX requires CHIAKI_FFX_SDK_DIR pointing at the FidelityFX SDK 1.1.x (ffx-api/include/ffx_api/vk/ffx_api_vk.h not found)")
+	endif()
+	# amd_fidelityfx_vk.dll is loaded at runtime, so only the headers are needed.
+	target_include_directories(chiaki PRIVATE "${CHIAKI_FFX_SDK_DIR}/ffx-api/include")
+	target_compile_definitions(chiaki PRIVATE CHIAKI_HAVE_FFX)
+	message(STATUS "AMD FSR 3.1 Frame Generation enabled (FidelityFX SDK: ${CHIAKI_FFX_SDK_DIR})")
 endif()
 if(CHIAKI_ENABLE_CLI)
 	add_definitions(-DCHIAKI_ENABLE_CLI)
