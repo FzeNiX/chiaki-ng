@@ -65,6 +65,7 @@ jobs:
           host: 'windows'
           target: 'desktop'
           modules: 'qtwebengine qtpositioning qtwebchannel qtwebsockets qtserialport'
+          cache: true
 
       - name: Install pip dependencies
         run: |
@@ -129,12 +130,36 @@ jobs:
         run: |
           mkdir build
 
+      # vcpkg removed the x-gha binary cache that run-vcpkg defaults to, so keep
+      # the built packages in a plain folder cached with actions/cache instead.
+      - name: Set up vcpkg binary cache
+        run: |
+          $cache = "${{ github.workspace }}\vcpkg-binary-cache"
+          New-Item -ItemType Directory -Force -Path $cache | Out-Null
+          echo "VCPKG_BINARY_SOURCES=clear;files,$cache,readwrite" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Restore vcpkg binary cache
+        uses: actions/cache/restore@v4
+        with:
+          path: vcpkg-binary-cache
+          key: vcpkg-bin-${{ runner.os }}-${{ env.triplet }}-${{ env.vcpkg_baseline }}-${{ hashFiles('vcpkg.json') }}
+          restore-keys: |
+            vcpkg-bin-${{ runner.os }}-${{ env.triplet }}-${{ env.vcpkg_baseline }}-
+
       - name: Setup vcpkg
         uses: lukka/run-vcpkg@v11
         with:
           vcpkgGitCommitId: ${{ env.vcpkg_baseline }}
           runVcpkgInstall: true
           vcpkgJsonGlob: "vcpkg.json"
+
+      # Saved right away so later failures in the job still keep the packages.
+      - name: Save vcpkg binary cache
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: vcpkg-binary-cache
+          key: vcpkg-bin-${{ runner.os }}-${{ env.triplet }}-${{ env.vcpkg_baseline }}-${{ hashFiles('vcpkg.json') }}
 
       - name: Build libplacebo
         run: |
