@@ -1,4 +1,5 @@
 #include "qmlmainwindow.h"
+#include "rtxvsr.h"
 #include "qmlbackend.h"
 #include "qmlsvgprovider.h"
 #include "chiaki/log.h"
@@ -2668,6 +2669,8 @@ QmlMainWindow::~QmlMainWindow()
     }
     pl_cache_destroy(&placebo_cache);
     pl_queue_destroy(&placebo_queue);
+    delete rtx_vsr;
+    rtx_vsr = nullptr;
     pl_renderer_destroy(&placebo_renderer);
     if (render_backend == RenderBackend::Vulkan) {
         pl_vulkan_destroy(&placebo_vulkan);
@@ -4922,15 +4925,24 @@ void QmlMainWindow::init(Settings *settings, bool exit_app_on_stream_exit)
         vk_exts[0] = VK_KHR_WIN32_SURFACE_EXTENSION_NAME;
 #endif
 
-        const char *opt_extensions[] = {
+        std::vector<const char *> opt_extensions = {
             VK_EXT_HDR_METADATA_EXTENSION_NAME,
         };
+        std::vector<const char *> opt_dev_extensions = {
+            VK_KHR_VIDEO_QUEUE_EXTENSION_NAME,
+            VK_KHR_VIDEO_DECODE_QUEUE_EXTENSION_NAME,
+            VK_KHR_VIDEO_DECODE_H264_EXTENSION_NAME,
+            VK_KHR_VIDEO_DECODE_H265_EXTENSION_NAME,
+        };
+        // NGX (RTX Video Super Resolution) extensions are optional; without
+        // them VSR initialization fails and libplacebo scaling is used.
+        RtxVsr::appendRequiredExtensions(opt_extensions, opt_dev_extensions);
 
         struct pl_vk_inst_params vk_inst_params = {
             .extensions = vk_exts,
             .num_extensions = 2,
-            .opt_extensions = opt_extensions,
-            .num_opt_extensions = 1,
+            .opt_extensions = opt_extensions.data(),
+            .num_opt_extensions = static_cast<int>(opt_extensions.size()),
         };
         placebo_vk_inst = pl_vk_inst_create(placebo_log, &vk_inst_params);
         if (!placebo_vk_inst) {
@@ -4960,21 +4972,14 @@ void QmlMainWindow::init(Settings *settings, bool exit_app_on_stream_exit)
         GET_PROC(vkGetPhysicalDeviceProperties2)
 #undef GET_PROC
 
-        const char *opt_dev_extensions[] = {
-            VK_KHR_VIDEO_QUEUE_EXTENSION_NAME,
-            VK_KHR_VIDEO_DECODE_QUEUE_EXTENSION_NAME,
-            VK_KHR_VIDEO_DECODE_H264_EXTENSION_NAME,
-            VK_KHR_VIDEO_DECODE_H265_EXTENSION_NAME,
-        };
-
         struct pl_vulkan_params vulkan_params = {
             .instance = placebo_vk_inst->instance,
             .get_proc_addr = placebo_vk_inst->get_proc_addr,
             .allow_software = true,
             PL_VULKAN_DEFAULTS
             .extra_queues = VK_QUEUE_VIDEO_DECODE_BIT_KHR,
-            .opt_extensions = opt_dev_extensions,
-            .num_opt_extensions = 4,
+            .opt_extensions = opt_dev_extensions.data(),
+            .num_opt_extensions = static_cast<int>(opt_dev_extensions.size()),
         };
         placebo_vulkan = pl_vulkan_create(placebo_log, &vulkan_params);
         if (!placebo_vulkan) {
@@ -5057,6 +5062,8 @@ renderer_backend_ready:
         placebo_log,
         placeboGpu()
     );
+    if (render_backend == RenderBackend::Vulkan && RtxVsr::compiledIn())
+        rtx_vsr = new RtxVsr(placebo_log);
 
     placebo_queue = pl_queue_create(placeboGpu());
 
@@ -6705,6 +6712,8 @@ void QmlMainWindow::render()
                 direct_frame = {};
                 if (backend && backend->zeroCopy())
                     backend->disableZeroCopy();
+            } else {
+                direct_frame_serial++;
             }
             av_frame_free(&incoming);
         }
@@ -7451,6 +7460,53 @@ void QmlMainWindow::render()
         }
     }
 
+    // RTX Video Super Resolution: replace each source frame with an NVIDIA
+    // upscaled RGB frame at the output size, so libplacebo only color maps it
+    // and scales it ~1:1. Any failure keeps the regular libplacebo path.
+    constexpr int kRtxVsrMaxMixFrames = 8;
+    struct pl_frame_mix vsr_frame_mix = frame_mix;
+    std::array<struct pl_frame, kRtxVsrMaxMixFrames> vsr_frames;
+    std::array<const struct pl_frame *, kRtxVsrMaxMixFrames> vsr_frame_ptrs;
+    std::array<uint64_t, kRtxVsrMaxMixFrames> vsr_signatures;
+    bool vsr_applied = false;
+    const int rtx_vsr_quality = rtx_vsr && has_settings ? settings->GetRtxVsrQuality() : 0;
+    if (rtx_vsr_quality > 0 && nvidia_card && stream_active && rtx_vsr->ensureInitialized(placebo_vulkan)) {
+        const int vsr_out_w = static_cast<int>(lroundf(fabsf(pl_rect_w(target_frame.crop))));
+        const int vsr_out_h = static_cast<int>(lroundf(fabsf(pl_rect_h(target_frame.crop))));
+        if (bypass_frame_queue) {
+            struct pl_frame upscaled = {};
+            uint64_t upscaled_signature = 0;
+            if (direct_render_frame.num_planes > 0 &&
+                rtx_vsr->process(&direct_render_frame, direct_frame_serial, vsr_out_w, vsr_out_h,
+                                 rtx_vsr_quality, &upscaled, &upscaled_signature)) {
+                direct_render_frame = upscaled;
+                vsr_applied = true;
+            }
+        } else if (frame_mix.num_frames <= kRtxVsrMaxMixFrames) {
+            vsr_applied = frame_mix.num_frames > 0;
+            for (int i = 0; i < frame_mix.num_frames && vsr_applied; i++) {
+                vsr_applied = rtx_vsr->process(frame_mix.frames[i], frame_mix.signatures[i],
+                                               vsr_out_w, vsr_out_h, rtx_vsr_quality,
+                                               &vsr_frames[i], &vsr_signatures[i]);
+                vsr_frame_ptrs[i] = &vsr_frames[i];
+            }
+            if (vsr_applied) {
+                vsr_frame_mix.frames = vsr_frame_ptrs.data();
+                vsr_frame_mix.signatures = vsr_signatures.data();
+            }
+        }
+    }
+    if (vsr_applied) {
+        // The RTX output already is at display size; skip the shader upscalers.
+        params.hooks = nullptr;
+        params.num_hooks = 0;
+    }
+    if (vsr_applied != rtx_vsr_active) {
+        rtx_vsr_active = vsr_applied;
+        qCInfo(chiakiGui) << "RTX Video Super Resolution" << (vsr_applied ? "active" : "inactive");
+    }
+    const struct pl_frame_mix *render_frame_mix = vsr_applied ? &vsr_frame_mix : &frame_mix;
+
     const qint64 render_setup_ready_us = static_cast<qint64>(chiaki_time_now_monotonic_us());
     if (render_setup_ready_us >= render_setup_config_after_us) {
         const auto render_schedule_state = snapshotRenderScheduleState();
@@ -7477,7 +7533,7 @@ void QmlMainWindow::render()
         logRenderSetupStats(render_call_begin_us, render_call_begin_us - render_setup_begin_us);
     if (!(bypass_frame_queue
         ? pl_render_image(placebo_renderer, &direct_render_frame, &target_frame, &params)
-        : pl_render_image_mix(placebo_renderer, &frame_mix, &target_frame, &params)))
+        : pl_render_image_mix(placebo_renderer, render_frame_mix, &target_frame, &params)))
     {
         qCWarning(chiakiGui) << "Failed to render Placebo frame!";
         close_started_frame(false);

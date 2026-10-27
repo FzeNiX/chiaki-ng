@@ -30,6 +30,8 @@ option(CHIAKI_LIB_ENABLE_MBEDTLS "Use mbedtls instead of OpenSSL as part of Chia
 option(CHIAKI_LIB_MBEDTLS_EXTERNAL_PROJECT "Fetch Mbed TLS instead of using system-provided libs" OFF)
 option(CHIAKI_LIB_OPENSSL_EXTERNAL_PROJECT "Use OpenSSL as CMake external project" OFF)
 option(CHIAKI_GUI_ENABLE_SDL_GAMECONTROLLER "Use SDL Gamecontroller for Input" ON)
+option(CHIAKI_ENABLE_RTX_VSR "Enable NVIDIA RTX Video Super Resolution (Windows, needs the NVIDIA DLSS/NGX SDK)" OFF)
+set(CHIAKI_NGX_SDK_DIR "" CACHE PATH "Root of the NVIDIA DLSS SDK (https://github.com/NVIDIA/DLSS) used for RTX Video Super Resolution")
 option(CHIAKI_CLI_ARGP_STANDALONE "Search for standalone argp lib for CLI" OFF)
 option(CHIAKI_ENABLE_STEAM_SHORTCUT "Add ability to create Steam shortcut" ON)
 tri_option(CHIAKI_USE_SYSTEM_JERASURE "Use system-provided jerasure instead of submodule" AUTO)

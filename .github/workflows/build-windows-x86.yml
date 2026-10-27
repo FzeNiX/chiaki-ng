@@ -137,6 +137,14 @@ jobs:
         run: |
           git apply --ignore-whitespace --verbose --directory=third-party/gf-complete/ scripts/windows-vc/gf-complete.patch
 
+      - name: Fetch NVIDIA NGX SDK (RTX Video Super Resolution)
+        run: |
+          git clone --depth 1 --filter=blob:none --no-checkout https://github.com/NVIDIA/DLSS.git ngx-sdk
+          cd ngx-sdk
+          git sparse-checkout set --no-cone /include/ /lib/Windows_x86_64/x64/nvsdk_ngx_d.lib /LICENSE.txt
+          git checkout
+          if (-not (Test-Path "lib\Windows_x86_64\x64\nvsdk_ngx_d.lib")) { throw "NGX library missing" }
+
       - name: Configure chiaki-ng
         run: |
           cmake `
@@ -149,6 +157,8 @@ jobs:
           -DCHIAKI_ENABLE_CLI=OFF `
           -DCHIAKI_GUI_ENABLE_SDL_GAMECONTROLLER=ON `
           -DCHIAKI_ENABLE_STEAMDECK_NATIVE=OFF `
+          -DCHIAKI_ENABLE_RTX_VSR=ON `
+          -DCHIAKI_NGX_SDK_DIR="${{ github.workspace }}\ngx-sdk" `
           -DPYTHON_EXECUTABLE="${{ env.pythonLocation }}\python.exe" `
           -DCMAKE_PREFIX_PATH="${{ github.workspace }}\${{ env.dep_folder }};${{ env.VULKAN_SDK }}"
 

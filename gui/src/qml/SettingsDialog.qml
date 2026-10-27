@@ -995,6 +995,28 @@ DialogView {
 
                     Label {
                         Layout.alignment: Qt.AlignRight
+                        visible: Chiaki.settings.rtxVsrSupported
+                        text: qsTr("RTX Video Super Resolution:")
+                    }
+
+                    C.ComboBox {
+                        Layout.preferredWidth: 400
+                        visible: Chiaki.settings.rtxVsrSupported
+                        model: [qsTr("Off"), qsTr("Low"), qsTr("Medium"), qsTr("High"), qsTr("Ultra")]
+                        currentIndex: Chiaki.settings.rtxVsrQuality
+                        onActivated: index => Chiaki.settings.rtxVsrQuality = index
+                        ToolTip.visible: hovered
+                        ToolTip.text: qsTr("Upscales SDR streams with NVIDIA RTX Video (RTX 20 series or newer, Vulkan renderer).\nRequires nvngx_vsr.dll from the NVIDIA RTX Video SDK next to chiaki.exe.")
+                    }
+
+                    Label {
+                        Layout.alignment: Qt.AlignRight
+                        visible: Chiaki.settings.rtxVsrSupported
+                        text: qsTr("(Off)")
+                    }
+
+                    Label {
+                        Layout.alignment: Qt.AlignRight
                         text: qsTr("Renderer Backend:")
                     }
 

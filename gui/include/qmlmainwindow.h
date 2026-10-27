@@ -43,6 +43,7 @@ class QmlBackend;
 class QOffscreenSurface;
 class QOpenGLContext;
 class QOpenGLFramebufferObject;
+class RtxVsr;
 class QWidget;
 class QLabel;
 class QVBoxLayout;
@@ -333,6 +334,9 @@ private:
     pl_opengl placebo_opengl = {};
     pl_swapchain placebo_swapchain = {};
     pl_renderer placebo_renderer = {};
+    RtxVsr *rtx_vsr = nullptr;
+    bool rtx_vsr_active = false;
+    uint64_t direct_frame_serial = 0;
     pl_queue placebo_queue = {};
     std::array<pl_tex, 8> placebo_tex{};
     VkSurfaceKHR surface = VK_NULL_HANDLE;

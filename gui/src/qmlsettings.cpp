@@ -1,5 +1,6 @@
 #include "qmlsettings.h"
 #include "sessionlog.h"
+#include "rtxvsr.h"
 
 #include <QSet>
 #include <QKeySequence>
@@ -989,6 +990,24 @@ void QmlSettings::setDirectFrameMapping(bool enabled)
     emit directFrameMappingChanged();
 }
 
+int QmlSettings::rtxVsrQuality() const
+{
+    return settings->GetRtxVsrQuality();
+}
+
+void QmlSettings::setRtxVsrQuality(int quality)
+{
+    if (quality == settings->GetRtxVsrQuality())
+        return;
+    settings->SetRtxVsrQuality(quality);
+    emit rtxVsrQualityChanged();
+}
+
+bool QmlSettings::rtxVsrSupported() const
+{
+    return RtxVsr::compiledIn();
+}
+
 void QmlSettings::setPlaceboFrameMixer(int mixer)
 {
     settings->SetPlaceboFrameMixer(static_cast<PlaceboFrameMixer>(mixer));
@@ -1907,6 +1926,7 @@ void QmlSettings::refreshAllKeys()
     emit noiseSuppressLevelChanged();
     emit echoSuppressLevelChanged();
 #endif
+    emit rtxVsrQualityChanged();
     emit displayTargetContrastChanged();
     emit displayTargetPeakChanged();
     emit displayTargetPrimChanged();

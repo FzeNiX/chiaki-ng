@@ -100,6 +100,8 @@ class QmlSettings : public QObject
 	Q_PROPERTY(int placeboPlaneDownscaler READ placeboPlaneDownscaler WRITE setPlaceboPlaneDownscaler NOTIFY placeboPlaneDownscalerChanged)
 	Q_PROPERTY(int placeboFrameMixer READ placeboFrameMixer WRITE setPlaceboFrameMixer NOTIFY placeboFrameMixerChanged)
 	Q_PROPERTY(bool directFrameMapping READ directFrameMapping WRITE setDirectFrameMapping NOTIFY directFrameMappingChanged)
+	Q_PROPERTY(int rtxVsrQuality READ rtxVsrQuality WRITE setRtxVsrQuality NOTIFY rtxVsrQualityChanged)
+	Q_PROPERTY(bool rtxVsrSupported READ rtxVsrSupported CONSTANT)
 	Q_PROPERTY(bool placeboDeinterlaceEnabled READ placeboDeinterlaceEnabled WRITE setPlaceboDeinterlaceEnabled NOTIFY placeboDeinterlaceEnabledChanged)
 	Q_PROPERTY(int placeboDeinterlacePreset READ placeboDeinterlacePreset WRITE setPlaceboDeinterlacePreset NOTIFY placeboDeinterlacePresetChanged)
 	Q_PROPERTY(int placeboDeinterlaceAlgorithm READ placeboDeinterlaceAlgorithm WRITE setPlaceboDeinterlaceAlgorithm NOTIFY placeboDeinterlaceAlgorithmChanged)
@@ -347,6 +349,9 @@ public:
     int placeboFrameMixer() const;
     bool directFrameMapping() const;
     void setDirectFrameMapping(bool enabled);
+    int rtxVsrQuality() const;
+    void setRtxVsrQuality(int quality);
+    bool rtxVsrSupported() const;
     void setPlaceboFrameMixer(int mixer);
 
     bool placeboDeinterlaceEnabled() const;
@@ -704,6 +709,7 @@ signals:
     void placeboPlaneDownscalerChanged();
     void placeboFrameMixerChanged();
     void directFrameMappingChanged();
+    void rtxVsrQualityChanged();
     void placeboDeinterlaceEnabledChanged();
     void placeboDeinterlacePresetChanged();
     void placeboDeinterlaceAlgorithmChanged();

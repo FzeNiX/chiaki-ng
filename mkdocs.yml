@@ -12,6 +12,7 @@ nav:
     - Automation: setup/automation.md
     - Game (Mode) Time: setup/steaming.md
     - Controller Options: setup/controlling.md
+    - RTX Video Super Resolution: setup/rtxvideo.md
   - Updates:
     - Updates Overview: updates/index.md
     - Releases: updates/releases.md

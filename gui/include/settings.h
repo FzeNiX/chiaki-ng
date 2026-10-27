@@ -516,6 +516,9 @@ class Settings : public QObject
 		PlaceboFrameMixer GetPlaceboFrameMixer() const;
 		bool GetDirectFrameMapping() const { return settings.value("settings/direct_frame_mapping", true).toBool(); }
 		void SetDirectFrameMapping(bool enabled) { settings.setValue("settings/direct_frame_mapping", enabled); }
+		// RTX Video Super Resolution quality: 0 = off, 1 = low .. 4 = ultra
+		int GetRtxVsrQuality() const { return qBound(0, settings.value("settings/rtx_vsr_quality", 0).toInt(), 4); }
+		void SetRtxVsrQuality(int quality) { settings.setValue("settings/rtx_vsr_quality", qBound(0, quality, 4)); }
 		void SetPlaceboFrameMixer(PlaceboFrameMixer frame_mixer);
 
 		bool GetPlaceboDeinterlaceEnabled() const;
