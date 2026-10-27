@@ -1,5 +1,6 @@
 #include "framegen.h"
 #include "ngxcore.h"
+#include "gputimer.h"
 
 #include <QLoggingCategory>
 
@@ -117,6 +118,7 @@ struct FrameGen::Impl
     VkCommandPool pool = VK_NULL_HANDLE;
     std::array<CommandSlot, kCommandSlots> cmd_slots = {};
     size_t next_slot = 0;
+    VkGpuTimer timer;
     VkSemaphore sem_done = VK_NULL_HANDLE;
     uint64_t done_value = 0;
 
@@ -242,6 +244,8 @@ bool FrameGen::Impl::initCommon(pl_vulkan vk_)
     renderer = pl_renderer_create(log, gpu);
     if (!renderer)
         return false;
+    // Timing is optional; without it the overlay just shows no GPU time.
+    timer.init(vk, vkGetDeviceProcAddr, static_cast<uint32_t>(cmd_slots.size()));
     common_ready = true;
     return true;
 }
@@ -481,6 +485,7 @@ void FrameGen::Impl::shutdownCommon()
     cmd_slots = {};
     if (sem_done)
         pl_vulkan_sem_destroy(gpu, &sem_done);
+    timer.destroy();
     pl_renderer_destroy(&renderer);
     done_value = 0;
     common_ready = false;
@@ -996,6 +1001,11 @@ FrameGen::Backend FrameGen::backend() const
     return impl->backend;
 }
 
+float FrameGen::gpuTimeMs() const
+{
+    return impl->timer.averageMs();
+}
+
 int FrameGen::maxMultiplier() const
 {
     return impl->backend_impl ? impl->backend_impl->maxGenerated() + 1 : 1;
@@ -1050,10 +1060,12 @@ bool FrameGen::process(const struct pl_frame *src, int out_w, int out_h, int mul
         return false;
     }
 
+    const uint32_t slot_index = static_cast<uint32_t>(d.next_slot);
     Impl::CommandSlot &slot = d.cmd_slots[d.next_slot];
     d.next_slot = (d.next_slot + 1) % d.cmd_slots.size();
     if (!d.waitDone(slot.done_value))
         return false;
+    d.timer.collect(slot_index);
 
     std::array<FgImage *, 3 + kMaxGenerated> held = {};
     size_t num_held = 0;
@@ -1082,7 +1094,9 @@ bool FrameGen::process(const struct pl_frame *src, int out_w, int out_h, int mul
         begin_info.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
         ok = d.vkBeginCommandBuffer(slot.cmd, &begin_info) == VK_SUCCESS;
         if (ok) {
+            d.timer.begin(slot.cmd, slot_index);
             ok = d.backend_impl->record(d, slot.cmd, set.real, generated, count, reset, frame_interval_ms);
+            d.timer.end(slot.cmd, slot_index);
             ok = d.vkEndCommandBuffer(slot.cmd) == VK_SUCCESS && ok;
         }
     }
@@ -1134,6 +1148,7 @@ FrameGen::~FrameGen() = default;
 bool FrameGen::ensureInitialized(pl_vulkan, Backend) { return false; }
 FrameGen::Backend FrameGen::backend() const { return Backend::None; }
 int FrameGen::maxMultiplier() const { return 1; }
+float FrameGen::gpuTimeMs() const { return 0.0f; }
 void FrameGen::reset() {}
 void FrameGen::destroy() {}
 bool FrameGen::process(const struct pl_frame *, int, int, int, float, std::vector<struct pl_frame> &) { return false; }

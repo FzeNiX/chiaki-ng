@@ -46,6 +46,10 @@ public:
     // generated frame per real frame).
     int maxMultiplier() const;
 
+    // Average GPU time of the backend's generation work per stream frame in
+    // milliseconds (0 if unknown).
+    float gpuTimeMs() const;
+
     // The next frame starts a new sequence: nothing is interpolated across it.
     void reset();
 

@@ -61,6 +61,7 @@ class QmlMainWindow : public QWindow
     Q_OBJECT
     Q_PROPERTY(bool hasVideo READ hasVideo NOTIFY hasVideoChanged)
     Q_PROPERTY(int droppedFrames READ droppedFrames NOTIFY droppedFramesChanged)
+    Q_PROPERTY(QString videoEnhancementStatus READ videoEnhancementStatus NOTIFY videoEnhancementStatusChanged)
     Q_PROPERTY(bool keepVideo READ keepVideo WRITE setKeepVideo NOTIFY keepVideoChanged)
     Q_PROPERTY(bool loadingTransitionComplete READ loadingTransitionComplete NOTIFY loadingTransitionCompleteChanged)
     Q_PROPERTY(VideoMode videoMode READ videoMode WRITE setVideoMode NOTIFY videoModeChanged)
@@ -113,6 +114,7 @@ public:
 
     bool hasVideo() const;
     int droppedFrames() const;
+    QString videoEnhancementStatus() const { return video_enhancement_status; }
     void increaseDroppedFrames();
 
     bool directStream() const;
@@ -175,6 +177,7 @@ public slots:
 signals:
     void hasVideoChanged();
     void droppedFramesChanged();
+    void videoEnhancementStatusChanged();
     void keepVideoChanged();
     void videoModeChanged();
     void zoomFactorChanged();
@@ -312,6 +315,11 @@ private:
     bool is_window_adjustable = false;
     bool is_stream_window_adjustable = false;
     QAtomicInteger<int> dropped_frames_current = 0;
+    // Written by the render thread, shown in the stats overlay.
+    QAtomicInteger<int> vsr_status_quality = 0;
+    QAtomicInteger<int> fg_status_backend = 0;
+    QAtomicInteger<int> fg_status_multiplier = 0;
+    QString video_enhancement_status;
     bool going_full = false;
     VideoMode video_mode = VideoMode::Normal;
     float zoom_factor = 0;

@@ -336,6 +336,15 @@ Item {
 
                 Label {
                     Layout.alignment: Qt.AlignRight
+                    text: Chiaki.window.videoEnhancementStatus
+                    font.pixelSize: 15
+                    font.bold: true
+                    color: "#a5d6a7"
+                    visible: Chiaki.session && text.length > 0
+                }
+
+                Label {
+                    Layout.alignment: Qt.AlignRight
                     text: qsTr("queue depth avg")
                     font.pixelSize: 15
                     opacity: Chiaki.session ? 1 : 0

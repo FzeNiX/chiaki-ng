@@ -31,6 +31,8 @@ public:
     // returning false without retrying, so it is cheap to call every frame.
     bool ensureInitialized(pl_vulkan vk);
     bool failed() const;
+    // Average GPU time of the VSR evaluation in milliseconds (0 if unknown).
+    float gpuTimeMs() const;
 
     // Waits for in-flight work and releases every Vulkan/NGX resource. Must be
     // called before the pl_vulkan device is destroyed.

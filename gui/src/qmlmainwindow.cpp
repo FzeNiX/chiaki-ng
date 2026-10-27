@@ -171,12 +171,14 @@ public:
         packetLossRow = makeRow(tr("packet loss"), QColor(QStringLiteral("#ef9a9a")), titleFont, valueFont, packetLossValue);
         droppedFramesRow = makeRow(tr("dropped frames"), QColor(QStringLiteral("#ef9a9a")), titleFont, valueFont, droppedFramesValue);
         lostFramesRow = makeRow(tr("lost frames"), QColor(QStringLiteral("#ef9a9a")), titleFont, valueFont, lostFramesValue);
+        enhancementRow = makeRow(tr("enhancement"), QColor(QStringLiteral("#a5d6a7")), titleFont, valueFont, enhancementValue);
 
         outer->addWidget(panel, 0, Qt::AlignRight | Qt::AlignVCenter);
 
         connect(owner, &QmlMainWindow::queueDepthAverageChanged, this, &StatsOverlayWidget::refresh);
         connect(owner, &QmlMainWindow::pendingFrameAgeChanged, this, &StatsOverlayWidget::refresh);
         connect(owner, &QmlMainWindow::droppedFramesChanged, this, &StatsOverlayWidget::refresh);
+        connect(owner, &QmlMainWindow::videoEnhancementStatusChanged, this, &StatsOverlayWidget::refresh);
         if (backend) {
             connect(backend, &QmlBackend::sessionChanged, this, [this](StreamSession *s) {
                 setSession(s);
@@ -270,6 +272,10 @@ public:
             lostFramesValue->setText(QString::number(session->GetFramesLost()));
         else
             lostFramesValue->clear();
+
+        const QString enhancement = owner ? owner->videoEnhancementStatus() : QString();
+        enhancementValue->setText(enhancement);
+        enhancementRow->setVisible(hasSession && !enhancement.isEmpty());
     }
 
 private:
@@ -282,12 +288,14 @@ private:
     QWidget *packetLossRow = nullptr;
     QWidget *droppedFramesRow = nullptr;
     QWidget *lostFramesRow = nullptr;
+    QWidget *enhancementRow = nullptr;
     QLabel *bitrateValue = nullptr;
     QLabel *queueDepthValue = nullptr;
     QLabel *pendingAgeValue = nullptr;
     QLabel *packetLossValue = nullptr;
     QLabel *droppedFramesValue = nullptr;
     QLabel *lostFramesValue = nullptr;
+    QLabel *enhancementValue = nullptr;
 };
 
 class DeferredPresentPacerThread final : public QThread
@@ -5118,6 +5126,9 @@ renderer_backend_ready:
         startup_warmup_preserve_next_session_change = false;
         session = s;
         stream_session_active.storeRelease(s ? 1 : 0);
+        vsr_status_quality.storeRelaxed(0);
+        fg_status_backend.storeRelaxed(0);
+        fg_status_multiplier.storeRelaxed(0);
         startup_video_visible_generation.fetchAndAddRelaxed(1);
         grab_input = 0;
         if (session)
@@ -5262,6 +5273,30 @@ renderer_backend_ready:
         if (dropped_frames != dropped_frames_next) {
             dropped_frames = dropped_frames_next;
             emit droppedFramesChanged();
+        }
+
+        QStringList parts;
+        static const char *const vsr_levels[] = { "", "Low", "Medium", "High", "Ultra" };
+        const int vsr_quality = vsr_status_quality.loadRelaxed();
+        if (vsr_quality > 0 && vsr_quality <= 4 && rtx_vsr) {
+            QString part = QStringLiteral("RTX VSR %1").arg(QLatin1String(vsr_levels[vsr_quality]));
+            if (rtx_vsr->gpuTimeMs() > 0.0f)
+                part += QStringLiteral(" %1 ms").arg(rtx_vsr->gpuTimeMs(), 0, 'f', 1);
+            parts << part;
+        }
+        const int fg_backend_status = fg_status_backend.loadRelaxed();
+        if (fg_backend_status > 0 && frame_gen) {
+            QString part = QStringLiteral("%1 FG %2x")
+                .arg(fg_backend_status == static_cast<int>(FrameGen::Backend::Dlss) ? QStringLiteral("DLSS") : QStringLiteral("FSR"))
+                .arg(fg_status_multiplier.loadRelaxed());
+            if (frame_gen->gpuTimeMs() > 0.0f)
+                part += QStringLiteral(" %1 ms").arg(frame_gen->gpuTimeMs(), 0, 'f', 1);
+            parts << part;
+        }
+        const QString status = parts.join(QStringLiteral(" · "));
+        if (status != video_enhancement_status) {
+            video_enhancement_status = status;
+            emit videoEnhancementStatusChanged();
         }
     });
 
@@ -7580,6 +7615,10 @@ void QmlMainWindow::render()
         fg_active_multiplier = 1;
         fg_pending_frames.clear();
     }
+    if (direct_frame_fresh || !bypass_frame_queue) {
+        fg_status_backend.storeRelaxed(fg_applied ? fg_backend : 0);
+        fg_status_multiplier.storeRelaxed(fg_applied ? fg_active_multiplier : 0);
+    }
 
     if (vsr_applied || fg_applied) {
         // The frame already is at display size; skip the shader upscalers.
@@ -7590,6 +7629,9 @@ void QmlMainWindow::render()
         rtx_vsr_active = vsr_applied;
         qCInfo(chiakiGui) << "RTX Video Super Resolution" << (vsr_applied ? "active" : "inactive");
     }
+    // Generated frames reuse the last stream frame's VSR state.
+    if (!fg_override)
+        vsr_status_quality.storeRelaxed(vsr_applied ? qBound(1, rtx_vsr_quality, 4) : 0);
     const struct pl_frame_mix *render_frame_mix = vsr_applied ? &vsr_frame_mix : &frame_mix;
 
     const qint64 render_setup_ready_us = static_cast<qint64>(chiaki_time_now_monotonic_us());

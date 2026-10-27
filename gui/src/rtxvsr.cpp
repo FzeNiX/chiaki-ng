@@ -1,5 +1,6 @@
 #include "rtxvsr.h"
 #include "ngxcore.h"
+#include "gputimer.h"
 
 #include <QLoggingCategory>
 
@@ -72,6 +73,7 @@ struct RtxVsr::Impl
     VkCommandPool pool = VK_NULL_HANDLE;
     std::array<CommandSlot, kCommandSlots> cmd_slots = {};
     size_t next_slot = 0;
+    VkGpuTimer timer;
 
     VkSemaphore sem_in = VK_NULL_HANDLE;
     VkSemaphore sem_out = VK_NULL_HANDLE;
@@ -189,6 +191,8 @@ bool RtxVsr::Impl::init(pl_vulkan vk_)
     renderer = pl_renderer_create(log, gpu);
     if (!renderer)
         return false;
+    // Timing is optional; without it the overlay just shows no GPU time.
+    timer.init(vk, vkGetDeviceProcAddr, static_cast<uint32_t>(cmd_slots.size()));
 
     VkCommandBuffer cmd = cmd_slots[0].cmd;
     VkCommandBufferBeginInfo begin_info = {};
@@ -374,10 +378,12 @@ NVSDK_NGX_Resource_VK RtxVsr::Impl::makeResource(const Image &img, bool read_wri
 
 bool RtxVsr::Impl::evaluate(Image &out, int in_w, int in_h, int quality)
 {
+    const uint32_t slot_index = static_cast<uint32_t>(next_slot);
     CommandSlot &slot = cmd_slots[next_slot];
     next_slot = (next_slot + 1) % cmd_slots.size();
     if (!waitDone(slot.done_value))
         return false;
+    timer.collect(slot_index);
 
     struct pl_vulkan_hold_params hold_in = {};
     hold_in.tex = input.tex;
@@ -423,12 +429,14 @@ bool RtxVsr::Impl::evaluate(Image &out, int in_w, int in_h, int quality)
         ok = vkBeginCommandBuffer(slot.cmd, &begin_info) == VK_SUCCESS;
     }
     if (ok) {
+        timer.begin(slot.cmd, slot_index);
         const NVSDK_NGX_Result result = NVSDK_NGX_VULKAN_EvaluateFeature_C(slot.cmd, feature, params, nullptr);
         if (NVSDK_NGX_FAILED(result)) {
             qCWarning(chiakiGui).nospace() << "[rtx-vsr] Evaluating VSR failed: " << NgxCore::resultString(result)
                 << " (0x" << Qt::hex << static_cast<unsigned>(result) << ")";
             ok = false;
         }
+        timer.end(slot.cmd, slot_index);
         ok = vkEndCommandBuffer(slot.cmd) == VK_SUCCESS && ok;
     }
     // Always hand both images back to libplacebo; on failure there is nothing
@@ -482,6 +490,7 @@ void RtxVsr::Impl::shutdown()
         pl_vulkan_sem_destroy(gpu, &sem_out);
         pl_vulkan_sem_destroy(gpu, &sem_done);
     }
+    timer.destroy();
     pl_renderer_destroy(&renderer);
     in_value = out_value = done_value = 0;
     initialized = false;
@@ -550,6 +559,11 @@ bool RtxVsr::ensureInitialized(pl_vulkan vk)
 bool RtxVsr::failed() const
 {
     return impl->init_failed;
+}
+
+float RtxVsr::gpuTimeMs() const
+{
+    return impl->timer.averageMs();
 }
 
 void RtxVsr::destroy()
@@ -664,6 +678,7 @@ RtxVsr::RtxVsr(pl_log) {}
 RtxVsr::~RtxVsr() = default;
 bool RtxVsr::ensureInitialized(pl_vulkan) { return false; }
 bool RtxVsr::failed() const { return true; }
+float RtxVsr::gpuTimeMs() const { return 0.0f; }
 void RtxVsr::destroy() {}
 bool RtxVsr::process(const struct pl_frame *, uint64_t, int, int, int, struct pl_frame *, uint64_t *) { return false; }
 
