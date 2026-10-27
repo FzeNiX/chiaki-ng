@@ -15,7 +15,8 @@ jobs:
       CXX: clang-cl.exe
       VULKAN_SDK: C:\VulkanSDK\
       triplet: x64-windows
-      vcpkg_baseline: 42bb0d9e8d4cf33485afb9ee2229150f79f61a1f
+      # vcpkg 2026.10.16; the older baseline points at MSYS2 packages that were removed from the mirrors
+      vcpkg_baseline: 9eec002df1cd109f8f104cd966a763daf9751489
       dep_folder: deps
       libplacebo_tag: v7.360.1
       # The pinned vcpkg ports (e.g. json-c) still declare cmake_minimum_required < 3.5,
@@ -197,8 +198,10 @@ jobs:
           cp "${env:VCPKG_INSTALLED_DIR}\${{ env.triplet }}\bin\libssl-*-x64.dll" chiaki-ng-Win
           cp "${{ github.workspace }}\${{ env.dep_folder }}\bin\SDL2.dll" chiaki-ng-Win
           cp "${{ github.workspace }}\${{ env.dep_folder }}\bin\SDL3.dll" chiaki-ng-Win
-          cp "${env:VCPKG_INSTALLED_DIR}\${{ env.triplet }}\bin\hidapi.dll" chiaki-ng-Win
-          cp "${env:VCPKG_INSTALLED_DIR}\${{ env.triplet }}\bin\fftw3.dll" chiaki-ng-Win
+          # Only present when Steam Deck native support pulls it in
+          if (Test-Path "${env:VCPKG_INSTALLED_DIR}\${{ env.triplet }}\bin\hidapi.dll") { cp "${env:VCPKG_INSTALLED_DIR}\${{ env.triplet }}\bin\hidapi.dll" chiaki-ng-Win }
+          # Only present when Steam Deck native support pulls it in
+          if (Test-Path "${env:VCPKG_INSTALLED_DIR}\${{ env.triplet }}\bin\fftw3.dll") { cp "${env:VCPKG_INSTALLED_DIR}\${{ env.triplet }}\bin\fftw3.dll" chiaki-ng-Win }
           cp "${env:VCPKG_INSTALLED_DIR}\${{ env.triplet }}\bin\opus.dll" chiaki-ng-Win
           cp "${env:VCPKG_INSTALLED_DIR}\${{ env.triplet }}\bin\libspeexdsp.dll" chiaki-ng-Win
           cp "${env:VCPKG_INSTALLED_DIR}\${{ env.triplet }}\bin\lcms2.dll" chiaki-ng-Win
