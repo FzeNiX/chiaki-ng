@@ -99,12 +99,26 @@ jobs:
 
       - name: Setup shaderc
         run: |
-          $ProgressPreference = 'SilentlyContinue'
-          $url = ((Invoke-WebRequest -UseBasicParsing -Uri "https://storage.googleapis.com/shaderc/badges/build_link_windows_vs2019_release.html").Content | Select-String -Pattern 'url=(.*)"').Matches.Groups[1].Value
-          Invoke-WebRequest -UseBasicParsing -Uri $url -OutFile .\shaderc.zip
-          Expand-Archive -LiteralPath "shaderc.zip" -DestinationPath "."
-          cp "./install/*" "./${{ env.dep_folder }}" -Force -Recurse
-          rm "./install" -r -force
+          # The shaderc badge download links are gone; use the shaderc shipped with the Vulkan SDK.
+          $deps = "${{ github.workspace }}\${{ env.dep_folder }}"
+          New-Item -ItemType Directory -Force -Path "$deps\bin", "$deps\lib\pkgconfig", "$deps\include" | Out-Null
+          Copy-Item "${{ env.VULKAN_SDK }}Bin\shaderc_shared.dll" "$deps\bin" -Force
+          Copy-Item "${{ env.VULKAN_SDK }}Lib\shaderc_shared.lib" "$deps\lib" -Force
+          Copy-Item "${{ env.VULKAN_SDK }}Include\shaderc" "$deps\include" -Recurse -Force
+          $prefix = $deps -replace '\\','/'
+          $pc = @(
+            "prefix=$prefix",
+            'libdir=${prefix}/lib',
+            'includedir=${prefix}/include',
+            '',
+            'Name: shaderc',
+            'Description: shaderc from the Vulkan SDK',
+            'Version: 2024.0',
+            'Libs: -L${libdir} -lshaderc_shared',
+            'Cflags: -I${includedir}'
+          )
+          Set-Content -Path "$deps\lib\pkgconfig\shaderc.pc" -Value $pc -Encoding ascii
+          Get-Content "$deps\lib\pkgconfig\shaderc.pc"
 
       - name: Make build directory
         run: |
