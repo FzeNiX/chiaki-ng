@@ -2,6 +2,9 @@ name: Build chiaki-ng Windows x86_64 (VC)
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - claude/happy-gauss-7i9rwm
 
 jobs:
   build-win_x64:
