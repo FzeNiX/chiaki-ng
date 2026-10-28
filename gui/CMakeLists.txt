@@ -91,6 +91,8 @@ elseif(WIN32)
 	list(APPEND SOURCE_FILES
 		include/windowsWakeSleep.h
 		src/windowsWakeSleep.cpp
+		include/windowsStreamTuning.h
+		src/windowsStreamTuning.cpp
 	)
 endif()
 
@@ -105,6 +107,10 @@ target_link_libraries(placebo-libav-impl PkgConfig::LIBPLACEBO FFMPEG::avcodec F
 target_link_libraries(chiaki PkgConfig::LIBPLACEBO placebo-libav-impl)
 
 target_link_libraries(chiaki chiaki-lib)
+if(WIN32)
+	# Stream tuning: MMCSS (avrt) and timer resolution (winmm).
+	target_link_libraries(chiaki avrt winmm)
+endif()
 
 if(CHIAKI_ENABLE_NGX)
 	if(NOT WIN32 OR NOT MSVC)
