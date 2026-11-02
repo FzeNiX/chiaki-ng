@@ -41,6 +41,12 @@ public:
     // Drops all size dependent state.
     void invalidate();
 
+    // Resolution of the motion analysis relative to the frames: 4 = 1/4
+    // (fast), 2 = 1/2 (finer motion around small details such as HUD text,
+    // about four times the analysis work).
+    void setAnalysisScale(int scale);
+    int analysisScale() const;
+
     // Average GPU time per stream frame in milliseconds (0 if unknown).
     float gpuTimeMs() const;
 

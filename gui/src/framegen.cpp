@@ -136,6 +136,7 @@ struct FrameGen::Impl
     bool reset_pending = true;
     // Real frame of the previous call (Flow interpolates from it).
     FgImage *last_real = nullptr;
+    bool flow_high_quality = false;
     // The first calls after a backend starts are logged step by step.
     int trace_frames = 0;
 
@@ -1103,6 +1104,11 @@ void FrameGen::reset()
     impl->reset_pending = true;
 }
 
+void FrameGen::setFlowHighQuality(bool high)
+{
+    impl->flow_high_quality = high;
+}
+
 void FrameGen::destroy()
 {
     impl->shutdownCommon();
@@ -1164,6 +1170,11 @@ bool FrameGen::process(const struct pl_frame *src, int out_w, int out_h, int mul
 
     if (d.backend == FrameGen::Backend::Flow) {
         auto *flow = static_cast<FlowBackend *>(d.backend_impl.get());
+        const int scale = d.flow_high_quality ? 2 : 4;
+        if (flow->interp->analysisScale() != scale) {
+            flow->interp->setAnalysisScale(scale);
+            qCInfo(chiakiGui) << "[framegen] Flow quality:" << (d.flow_high_quality ? "high (1/2 resolution analysis)" : "performance (1/4 resolution analysis)");
+        }
         const bool flow_reset = d.reset_pending || !d.have_history || !d.last_real;
         pl_tex flow_out[kMaxGenerated] = {};
         float times[kMaxGenerated] = {};
@@ -1315,6 +1326,7 @@ bool FrameGen::backendFailed(Backend) const { return true; }
 int FrameGen::maxMultiplier() const { return 1; }
 float FrameGen::gpuTimeMs() const { return 0.0f; }
 void FrameGen::reset() {}
+void FrameGen::setFlowHighQuality(bool) {}
 void FrameGen::destroy() {}
 bool FrameGen::process(const struct pl_frame *, int, int, int, float, std::vector<struct pl_frame> &) { return false; }
 

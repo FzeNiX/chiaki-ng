@@ -1084,6 +1084,19 @@ bool QmlSettings::frameGenFlowSupported() const
     return FrameGen::backendCompiledIn(FrameGen::Backend::Flow);
 }
 
+bool QmlSettings::frameGenFlowHighQuality() const
+{
+    return settings->GetFrameGenFlowHighQuality();
+}
+
+void QmlSettings::setFrameGenFlowHighQuality(bool high)
+{
+    if (high == settings->GetFrameGenFlowHighQuality())
+        return;
+    settings->SetFrameGenFlowHighQuality(high);
+    emit frameGenFlowHighQualityChanged();
+}
+
 bool QmlSettings::frameGenFsrSupported() const
 {
     return FrameGen::backendCompiledIn(FrameGen::Backend::Fsr);

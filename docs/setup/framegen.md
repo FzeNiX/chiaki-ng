@@ -27,7 +27,17 @@ renderer runs. For each stream frame it
    Where nothing agrees (areas being covered or revealed) it uses the
    temporally nearer frame; across a scene cut it repeats the nearer frame.
 
-The overlay shows `Flow FG 2x` and its GPU time. Fast motion around object
+**Flow Quality** (Settings → Video): *Performance* analyses motion at 1/4
+resolution (≈0.5 ms on an RTX 5070 Ti at 1440p), *Quality* at 1/2 resolution
+(roughly 2–4x the analysis time; finer motion around small details). Use
+Performance on handhelds such as the Steam Deck.
+
+Static overlays (HUD, subtitles) are detected per pixel and kept in place;
+next to them the scene's motion is looked up up to ~20 px away so the
+background behind HUD text does not smear.
+
+The overlay shows `Flow FG 2x` (`Flow FG HQ 2x` in Quality mode) and its GPU
+time. Fast motion around object
 edges can show some smearing in the covered/revealed areas.
 
 ## Requirements

@@ -545,6 +545,9 @@ class Settings : public QObject
 		}
 		// Backend restored when frame generation is switched back on from the stream menu (0 = never chosen).
 		int GetFrameGenLastBackend() const { return qBound(0, settings.value("settings/frame_gen_last_backend", 0).toInt(), 3); }
+		// Flow frame generation analysis resolution: false = 1/4 (performance), true = 1/2 (quality)
+		bool GetFrameGenFlowHighQuality() const { return settings.value("settings/frame_gen_flow_high_quality", false).toBool(); }
+		void SetFrameGenFlowHighQuality(bool high) { settings.setValue("settings/frame_gen_flow_high_quality", high); }
 		// Output frames per stream frame (2 = one generated frame per real frame)
 		int GetFrameGenMultiplier() const { return qBound(2, settings.value("settings/frame_gen_multiplier", 2).toInt(), 4); }
 		void SetFrameGenMultiplier(int multiplier) { settings.setValue("settings/frame_gen_multiplier", qBound(2, multiplier, 4)); }

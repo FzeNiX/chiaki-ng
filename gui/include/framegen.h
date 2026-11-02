@@ -59,6 +59,9 @@ public:
     // The next frame starts a new sequence: nothing is interpolated across it.
     void reset();
 
+    // Flow backend only: analyse motion at 1/2 instead of 1/4 resolution.
+    void setFlowHighQuality(bool high);
+
     // Waits for in-flight work and releases every Vulkan and backend resource.
     // Must be called before the pl_vulkan device is destroyed.
     void destroy();

@@ -110,6 +110,7 @@ class QmlSettings : public QObject
 	Q_PROPERTY(bool frameGenDlssSupported READ frameGenDlssSupported CONSTANT)
 	Q_PROPERTY(bool frameGenFsrSupported READ frameGenFsrSupported CONSTANT)
 	Q_PROPERTY(bool frameGenFlowSupported READ frameGenFlowSupported CONSTANT)
+	Q_PROPERTY(bool frameGenFlowHighQuality READ frameGenFlowHighQuality WRITE setFrameGenFlowHighQuality NOTIFY frameGenFlowHighQualityChanged)
 	Q_PROPERTY(bool placeboDeinterlaceEnabled READ placeboDeinterlaceEnabled WRITE setPlaceboDeinterlaceEnabled NOTIFY placeboDeinterlaceEnabledChanged)
 	Q_PROPERTY(int placeboDeinterlacePreset READ placeboDeinterlacePreset WRITE setPlaceboDeinterlacePreset NOTIFY placeboDeinterlacePresetChanged)
 	Q_PROPERTY(int placeboDeinterlaceAlgorithm READ placeboDeinterlaceAlgorithm WRITE setPlaceboDeinterlaceAlgorithm NOTIFY placeboDeinterlaceAlgorithmChanged)
@@ -372,6 +373,8 @@ public:
     bool frameGenDlssSupported() const;
     bool frameGenFsrSupported() const;
     bool frameGenFlowSupported() const;
+    bool frameGenFlowHighQuality() const;
+    void setFrameGenFlowHighQuality(bool high);
     void setPlaceboFrameMixer(int mixer);
 
     bool placeboDeinterlaceEnabled() const;
@@ -637,6 +640,7 @@ public:
     Q_INVOKABLE QString stringForStreamMenuShortcut() const;
 
 signals:
+    void frameGenFlowHighQualityChanged();
     void resolutionLocalPS4Changed();
     void resolutionRemotePS4Changed();
     void resolutionLocalPS5Changed();

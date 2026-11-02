@@ -1067,6 +1067,29 @@ DialogView {
 
                     Label {
                         Layout.alignment: Qt.AlignRight
+                        visible: Chiaki.settings.frameGenFlowSupported
+                        text: qsTr("Flow Quality:")
+                    }
+
+                    C.ComboBox {
+                        Layout.preferredWidth: 400
+                        visible: Chiaki.settings.frameGenFlowSupported
+                        enabled: Chiaki.settings.frameGenBackend === 3
+                        model: [qsTr("Performance (1/4 resolution motion analysis)"), qsTr("Quality (1/2 resolution motion analysis)")]
+                        currentIndex: Chiaki.settings.frameGenFlowHighQuality ? 1 : 0
+                        onActivated: index => Chiaki.settings.frameGenFlowHighQuality = index === 1
+                        ToolTip.visible: hovered
+                        ToolTip.text: qsTr("Quality tracks motion around small details (HUD text, thin edges) more precisely and costs about four times the analysis GPU time. Performance suits handhelds such as the Steam Deck.")
+                    }
+
+                    Label {
+                        Layout.alignment: Qt.AlignRight
+                        visible: Chiaki.settings.frameGenFlowSupported
+                        text: qsTr("(Performance)")
+                    }
+
+                    Label {
+                        Layout.alignment: Qt.AlignRight
                         visible: Chiaki.settings.frameGenSupported
                         text: qsTr("Frame Generation Multiplier:")
                     }

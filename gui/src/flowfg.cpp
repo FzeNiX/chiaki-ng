@@ -16,8 +16,9 @@ Q_DECLARE_LOGGING_CATEGORY(chiakiGui);
 
 namespace {
 
-// The analysis starts at 1/4 of the display resolution.
-constexpr int kBaseScale = 4;
+// The analysis starts at 1/4 (or 1/2, see setAnalysisScale) of the display
+// resolution.
+constexpr int kDefaultBaseScale = 4;
 constexpr int kMaxLevels = 6;
 // The coarsest level is at most this small (in its shorter dimension).
 constexpr int kCoarsestMin = 24;
@@ -70,7 +71,7 @@ float flow_cost(vec2 c, vec2 v)
     float s = 0.0;
     for (int j = -1; j <= 1; j++) {
         for (int i = -1; i <= 1; i++) {
-            vec2 d = vec2(i, j);
+            vec2 d = vec2(i, j) * fgPatchStep;
             float a = textureLod(fgPrevL, (c + d - h) * inv, 0.0).r;
             float b = textureLod(fgCurL, (c + d + h) * inv, 0.0).r;
             s += abs(a - b);
@@ -256,9 +257,15 @@ if (st.x > 0.12 || st.y > 0.45) {
     for (int j = 0; j <= 1; j++)
         for (int i = 0; i <= 1; i++)
             flow_pick(c, texelFetch(fgFlow, clamp(fp + ivec2(i, j), ivec2(0), fmax), 0).xy, vb, inv, a, b, err, bv);
-    for (int j = -1; j <= 2; j += 3)
-        for (int i = -1; i <= 2; i += 3)
-            flow_pick(c, texelFetch(fgFlow, clamp(fp + ivec2(i, j), ivec2(0), fmax), 0).xy, vb, inv, a, b, err, bv);
+    // Two outer rings reaching ~6 and ~20 display pixels (whatever the
+    // analysis scale): next to a static overlay or a small object the blocks
+    // nearby carry its motion, the surface around it is found further out.
+    for (int r = 0; r < 2; r++) {
+        int reach = int(r == 0 ? fgReach : fgReachFar);
+        for (int j = -reach; j <= 1 + reach; j += 1 + 2 * reach)
+            for (int i = -reach; i <= 1 + reach; i += 1 + 2 * reach)
+                flow_pick(c, texelFetch(fgFlow, clamp(fp + ivec2(i, j), ivec2(0), fmax), 0).xy, vb, inv, a, b, err, bv);
+    }
     // Zero motion is always a candidate (static overlays, HUD).
     flow_pick(c, vec2(0.0), vb, inv, a, b, err, bv);
     vec3 blended = mix(a, b, fgT);
@@ -357,6 +364,7 @@ struct FlowInterpolator::Impl
     pl_dispatch dp = nullptr;
     pl_fmt fmt = nullptr;
 
+    int base_scale = kDefaultBaseScale;
     int width = 0;
     int height = 0;
     int levels = 0;
@@ -423,8 +431,8 @@ bool FlowInterpolator::Impl::ensureSize(int w, int h)
         return true;
     destroyTextures();
 
-    int cw = std::max(1, (w + kBaseScale - 1) / kBaseScale);
-    int ch = std::max(1, (h + kBaseScale - 1) / kBaseScale);
+    int cw = std::max(1, (w + base_scale - 1) / base_scale);
+    int ch = std::max(1, (h + base_scale - 1) / base_scale);
     int n = 0;
     while (n < kMaxLevels) {
         lw[n] = cw;
@@ -602,6 +610,21 @@ void FlowInterpolator::invalidate()
     impl->destroyTextures();
 }
 
+void FlowInterpolator::setAnalysisScale(int scale)
+{
+    scale = scale <= 2 ? 2 : 4;
+    if (scale == impl->base_scale)
+        return;
+    impl->base_scale = scale;
+    // The next call rebuilds every analysis texture at the new size.
+    impl->destroyTextures();
+}
+
+int FlowInterpolator::analysisScale() const
+{
+    return impl->base_scale;
+}
+
 float FlowInterpolator::gpuTimeMs() const
 {
     return impl->gpu_ms;
@@ -653,6 +676,9 @@ bool FlowInterpolator::interpolate(pl_tex prev, pl_tex cur, pl_tex const *output
         const float has_coarse = coarsest ? 0.0f : 1.0f;
         const float has_temporal = (l == 0 && d.have_temporal) ? 1.0f : 0.0f;
         const int radius = kCoarseRadius;
+        // The matching patch keeps covering ~10 display pixels when the
+        // finest level is at 1/2 resolution; a smaller patch follows noise.
+        const float patch_step = (l == 0 && d.base_scale < kDefaultBaseScale) ? 2.0f : 1.0f;
         pl_tex coarse = coarsest ? d.dummy : d.flow[li + 1];
         pl_tex temporal = d.final_flow[static_cast<size_t>(d.final_index)];
         if (!d.run("flow search", kSearchHeader, kSearchBody,
@@ -661,7 +687,8 @@ bool FlowInterpolator::interpolate(pl_tex prev, pl_tex cur, pl_tex const *output
                      storageDesc("fgDst", d.flow[li]) },
                    { vec2Var("fgSize", size), vec2Var("fgCoarseSize", coarse_size), floatVar("fgToFull", &to_full),
                      floatVar("fgMaxFlow", &max_flow), floatVar("fgHasCoarse", &has_coarse),
-                     floatVar("fgHasTemporal", &has_temporal), intVar("fgRadius", &radius) },
+                     floatVar("fgHasTemporal", &has_temporal), intVar("fgRadius", &radius),
+                     floatVar("fgPatchStep", &patch_step) },
                    d.lw[l], d.lh[l], 16))
             return false;
     }
@@ -672,10 +699,12 @@ bool FlowInterpolator::interpolate(pl_tex prev, pl_tex cur, pl_tex const *output
         const float size[2] = { static_cast<float>(d.lw[0]), static_cast<float>(d.lh[0]) };
         const float to_full = full[0] / size[0];
         const float max_flow = 0.3f * size[0];
+        const float patch_step = d.base_scale < kDefaultBaseScale ? 2.0f : 1.0f;
         if (!d.run("flow clean-up", kSearchHeader, kCleanBody,
                    { sampledDesc("fgPrevL", prev_pyr->luma[0]), sampledDesc("fgCurL", cur_pyr.luma[0]),
                      sampledDesc("fgCoarse", d.flow[0], false), storageDesc("fgDst", d.final_flow[static_cast<size_t>(next_final)]) },
-                   { vec2Var("fgSize", size), floatVar("fgToFull", &to_full), floatVar("fgMaxFlow", &max_flow) },
+                   { vec2Var("fgSize", size), floatVar("fgToFull", &to_full), floatVar("fgMaxFlow", &max_flow),
+                     floatVar("fgPatchStep", &patch_step) },
                    d.lw[0], d.lh[0], 16))
             return false;
     }
@@ -694,12 +723,15 @@ bool FlowInterpolator::interpolate(pl_tex prev, pl_tex cur, pl_tex const *output
     // Synthesis of each requested frame.
     pl_tex final_tex = d.final_flow[static_cast<size_t>(d.final_index)];
     const float flow_size[2] = { static_cast<float>(d.lw[0]), static_cast<float>(d.lh[0]) };
+    const float reach = d.base_scale < kDefaultBaseScale ? 2.0f : 1.0f;
+    const float reach_far = d.base_scale < kDefaultBaseScale ? 9.0f : 4.0f;
     for (int i = 0; i < count; i++) {
         const float t = times[i];
         if (!d.run("flow synthesis", kSynthHeader, kSynthBody,
                    { sampledDesc("fgPrevC", prev), sampledDesc("fgCurC", cur), sampledDesc("fgFlow", final_tex),
                      sampledDesc("fgStats", d.stats, false), storageDesc("fgOutImg", outputs[i]) },
-                   { vec2Var("fgSize", full), vec2Var("fgFlowSize", flow_size), floatVar("fgT", &t) },
+                   { vec2Var("fgSize", full), vec2Var("fgFlowSize", flow_size), floatVar("fgT", &t),
+                     floatVar("fgReach", &reach), floatVar("fgReachFar", &reach_far) },
                    d.width, d.height, 16))
             return false;
     }
