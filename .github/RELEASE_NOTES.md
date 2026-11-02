@@ -25,7 +25,7 @@ RTX Video Super Resolution, DLSS and FSR Frame Generation are **Windows only**. 
 
 ## Fixes and tuning
 - Packet loss statistic fixed when sequence numbers wrap around.
-- Windows: qWAVE QoS on the stream sockets, MMCSS "Games" priority for network and render threads, 1 ms timer resolution, no power throttling while streaming.
+- Windows: qWAVE QoS on the stream sockets, MMCSS "Games" priority for the network threads, 1 ms timer resolution, no power throttling while streaming.
 - From upstream: use-after-free crashes on session end / controller disconnect / exit, Takion send buffer used after the receive loop ended, reorder queue not clearing dropped entries.
 - Frame Gen crash guard: if the app crashes while Frame Gen starts, Frame Gen is switched off on the next launch.
 
