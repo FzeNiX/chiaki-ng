@@ -1084,6 +1084,28 @@ bool QmlSettings::frameGenFlowSupported() const
     return FrameGen::backendCompiledIn(FrameGen::Backend::Flow);
 }
 
+bool QmlSettings::ambientBorder() const
+{
+    return settings->GetAmbientBorder();
+}
+
+void QmlSettings::setAmbientBorder(bool enabled)
+{
+    if (enabled == settings->GetAmbientBorder())
+        return;
+    settings->SetAmbientBorder(enabled);
+    emit ambientBorderChanged();
+}
+
+bool QmlSettings::ambientBorderSupported() const
+{
+#if PL_API_VER >= 355
+    return true;
+#else
+    return false;
+#endif
+}
+
 bool QmlSettings::frameGenFlowHighQuality() const
 {
     return settings->GetFrameGenFlowHighQuality();

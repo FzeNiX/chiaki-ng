@@ -545,6 +545,10 @@ class Settings : public QObject
 		}
 		// Backend restored when frame generation is switched back on from the stream menu (0 = never chosen).
 		int GetFrameGenLastBackend() const { return qBound(0, settings.value("settings/frame_gen_last_backend", 0).toInt(), 3); }
+		// Fill the empty border around the video (ultrawide displays, Zoom off)
+		// with a blurred copy of the picture instead of black.
+		bool GetAmbientBorder() const { return settings.value("settings/ambient_border", false).toBool(); }
+		void SetAmbientBorder(bool enabled) { settings.setValue("settings/ambient_border", enabled); }
 		// Flow frame generation analysis resolution: false = 1/4 (performance), true = 1/2 (quality)
 		bool GetFrameGenFlowHighQuality() const { return settings.value("settings/frame_gen_flow_high_quality", false).toBool(); }
 		void SetFrameGenFlowHighQuality(bool high) { settings.setValue("settings/frame_gen_flow_high_quality", high); }

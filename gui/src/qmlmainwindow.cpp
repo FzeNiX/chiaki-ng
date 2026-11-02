@@ -7564,6 +7564,14 @@ void QmlMainWindow::render()
     // appear to support alpha transaprency
     if (sw_frame.color_repr.alpha == PL_ALPHA_NONE)
         params.background_transparency = 0.0;
+#if PL_API_VER >= 355
+    // Ambient border: fill the bars around the video (e.g. 16:9 on an
+    // ultrawide display) with a heavily blurred copy of the picture.
+    if (hint_frame && has_settings && settings->GetAmbientBorder()) {
+        params.border = PL_CLEAR_BLUR;
+        params.blur_radius = 48.0f;
+    }
+#endif
 
     const struct pl_hook *fsrcnnx_hook = nullptr;
     if (hint_frame) {

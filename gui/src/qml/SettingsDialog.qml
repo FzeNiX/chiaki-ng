@@ -953,6 +953,28 @@ DialogView {
 
                     Label {
                         Layout.alignment: Qt.AlignRight
+                        visible: Chiaki.settings.ambientBorderSupported
+                        text: qsTr("Border Fill:")
+                    }
+
+                    C.ComboBox {
+                        Layout.preferredWidth: 400
+                        visible: Chiaki.settings.ambientBorderSupported
+                        model: [qsTr("Black"), qsTr("Ambient (blurred picture)")]
+                        currentIndex: Chiaki.settings.ambientBorder ? 1 : 0
+                        onActivated: index => Chiaki.settings.ambientBorder = index === 1
+                        ToolTip.visible: hovered
+                        ToolTip.text: qsTr("Fills the bars around the video (for example a 16:9 stream on an ultrawide display) with a blurred copy of the picture instead of black.")
+                    }
+
+                    Label {
+                        Layout.alignment: Qt.AlignRight
+                        visible: Chiaki.settings.ambientBorderSupported
+                        text: qsTr("(Black)")
+                    }
+
+                    Label {
+                        Layout.alignment: Qt.AlignRight
                         text: qsTr("Frame Delivery:")
                     }
 

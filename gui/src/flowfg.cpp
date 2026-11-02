@@ -170,6 +170,24 @@ imageStore(fgDst, p, vec4(best * fgToFull, best_score, 1.0));
 )GLSL";
 
 // Scene cut statistics over the coarsest level, by a single invocation.
+// Fraction of display pixels in each 2x2 block that do not change between
+// the two frames: high in HUD text and other static overlays.
+const char *kStillBody = R"GLSL(
+ivec2 p = ivec2(gl_GlobalInvocationID.xy);
+if (p.x >= int(fgDstSize.x) || p.y >= int(fgDstSize.y))
+    return;
+ivec2 smax = ivec2(fgSrcSize) - 1;
+float n = 0.0;
+for (int j = 0; j < 2; j++) {
+    for (int i = 0; i < 2; i++) {
+        ivec2 q = clamp(p * 2 + ivec2(i, j), ivec2(0), smax);
+        vec3 d = abs(texelFetch(fgPrevC, q, 0).rgb - texelFetch(fgCurC, q, 0).rgb);
+        n += (d.r + d.g + d.b) * (1.0 / 3.0) < 0.012 ? 1.0 : 0.0;
+    }
+}
+imageStore(fgDst, p, vec4(n * 0.25, 0.0, 0.0, 1.0));
+)GLSL";
+
 const char *kStatsBody = R"GLSL(
 if (gl_GlobalInvocationID.x != 0u || gl_GlobalInvocationID.y != 0u)
     return;
@@ -300,6 +318,21 @@ if (st.x > 0.12 || st.y > 0.45) {
     still = max(still, flow_diff(texelFetch(fgPrevC, clamp(p - ivec2(0, 1), ivec2(0), pmax), 0).rgb,
                                  texelFetch(fgCurC, clamp(p - ivec2(0, 1), ivec2(0), pmax), 0).rgb));
     res = mix(mix(p0, c0, fgT), res, smoothstep(0.006, 0.02, still));
+
+    // Inside HUD text the strokes' anti-aliased edges and outlines blend with
+    // the moving scene, so they change a little and fail the test above; when
+    // most of the neighbourhood is static and the pixel only changes a little,
+    // keep it in place too instead of tearing the glyph apart.
+    vec2 sinv = 1.0 / fgStillSize;
+    vec2 sc = c * 0.5;
+    float dens = 0.0;
+    for (int j = -1; j <= 1; j++)
+        for (int i = -1; i <= 1; i++)
+            dens += textureLod(fgStill, (sc + vec2(i, j) * 1.5) * sinv, 0.0).r;
+    dens *= 1.0 / 9.0;
+    float own = flow_diff(p0, c0);
+    float hud = smoothstep(0.15, 0.35, dens) * (1.0 - smoothstep(0.15, 0.40, own));
+    res = mix(res, mix(p0, c0, fgT), hud);
 }
 imageStore(fgOutImg, p, vec4(res, 1.0));
 )GLSL";
@@ -379,6 +412,7 @@ struct FlowInterpolator::Impl
     // Bound where a pass needs no input (every descriptor of a pass must be
     // a distinct texture).
     pl_tex dummy = nullptr;
+    pl_tex still = nullptr; // static pixel density at 1/2 resolution
     bool duplicate_warned = false;
 
     std::vector<pl_timer> timers;
@@ -421,6 +455,7 @@ void FlowInterpolator::Impl::destroyTextures()
         pl_tex_destroy(gpu, &tex);
     pl_tex_destroy(gpu, &stats);
     pl_tex_destroy(gpu, &dummy);
+    pl_tex_destroy(gpu, &still);
     width = height = levels = 0;
     have_temporal = false;
 }
@@ -460,6 +495,9 @@ bool FlowInterpolator::Impl::ensureSize(int w, int h)
     }
     stats = makeTex(1, 1);
     dummy = makeTex(1, 1);
+    still = makeTex(std::max(1, (w + 1) / 2), std::max(1, (h + 1) / 2));
+    if (!still)
+        return false;
     if (!stats || !dummy)
         return false;
     width = w;
@@ -717,6 +755,15 @@ bool FlowInterpolator::interpolate(pl_tex prev, pl_tex cur, pl_tex const *output
                    1, 1, 1))
             return false;
     }
+    {
+        const float src_size[2] = { static_cast<float>(d.width), static_cast<float>(d.height) };
+        const float dst_size[2] = { static_cast<float>(d.still->params.w), static_cast<float>(d.still->params.h) };
+        if (!d.run("flow static mask", nullptr, kStillBody,
+                   { sampledDesc("fgPrevC", prev, false), sampledDesc("fgCurC", cur, false), storageDesc("fgDst", d.still) },
+                   { vec2Var("fgSrcSize", src_size), vec2Var("fgDstSize", dst_size) },
+                   d.still->params.w, d.still->params.h, 16))
+            return false;
+    }
     d.final_index = next_final;
     d.have_temporal = true;
 
@@ -724,14 +771,17 @@ bool FlowInterpolator::interpolate(pl_tex prev, pl_tex cur, pl_tex const *output
     pl_tex final_tex = d.final_flow[static_cast<size_t>(d.final_index)];
     const float flow_size[2] = { static_cast<float>(d.lw[0]), static_cast<float>(d.lh[0]) };
     const float reach = d.base_scale < kDefaultBaseScale ? 2.0f : 1.0f;
+    const float still_size[2] = { static_cast<float>(d.still->params.w), static_cast<float>(d.still->params.h) };
     const float reach_far = d.base_scale < kDefaultBaseScale ? 9.0f : 4.0f;
     for (int i = 0; i < count; i++) {
         const float t = times[i];
         if (!d.run("flow synthesis", kSynthHeader, kSynthBody,
                    { sampledDesc("fgPrevC", prev), sampledDesc("fgCurC", cur), sampledDesc("fgFlow", final_tex),
-                     sampledDesc("fgStats", d.stats, false), storageDesc("fgOutImg", outputs[i]) },
+                     sampledDesc("fgStats", d.stats, false), sampledDesc("fgStill", d.still),
+                     storageDesc("fgOutImg", outputs[i]) },
                    { vec2Var("fgSize", full), vec2Var("fgFlowSize", flow_size), floatVar("fgT", &t),
-                     floatVar("fgReach", &reach), floatVar("fgReachFar", &reach_far) },
+                     floatVar("fgReach", &reach), floatVar("fgReachFar", &reach_far),
+                     vec2Var("fgStillSize", still_size) },
                    d.width, d.height, 16))
             return false;
     }

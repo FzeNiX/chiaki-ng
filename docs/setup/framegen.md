@@ -32,7 +32,9 @@ resolution (≈0.5 ms on an RTX 5070 Ti at 1440p), *Quality* at 1/2 resolution
 (roughly 2–4x the analysis time; finer motion around small details). Use
 Performance on handhelds such as the Steam Deck.
 
-Static overlays (HUD, subtitles) are detected per pixel and kept in place;
+Static overlays (HUD, subtitles) are detected per pixel and kept in place,
+including the anti-aliased edges and outlines of HUD text (a 1/2 resolution
+mask of static pixels marks text areas);
 next to them the scene's motion is looked up up to ~20 px away so the
 background behind HUD text does not smear.
 
