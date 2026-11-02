@@ -25,6 +25,7 @@ extern "C" {
 #include <libavutil/pixfmt.h>
 }
 
+#include <type_traits>
 #include <QByteArray>
 #include <QPointer>
 #include <QColor>
@@ -2702,6 +2703,11 @@ QmlMainWindow::~QmlMainWindow()
     delete rtx_vsr;
     rtx_vsr = nullptr;
     pl_renderer_destroy(&placebo_renderer);
+    // User shader hooks hold a reference to the GPU (their descriptors destroy
+    // buffers/textures via p->gpu), so they must be released before the GPU is.
+    pl_mpv_user_shader_destroy(&fsr_hook);
+    pl_mpv_user_shader_destroy(&fsrcnnx_hook_8);
+    pl_mpv_user_shader_destroy(&fsrcnnx_hook_16);
     if (render_backend == RenderBackend::Vulkan) {
         pl_vulkan_destroy(&placebo_vulkan);
         pl_vk_inst_destroy(&placebo_vk_inst);
@@ -2712,9 +2718,6 @@ QmlMainWindow::~QmlMainWindow()
     delete qt_gl_offscreen_surface;
     delete qt_gl_context;
     pl_options_free(&renderparams_opts);
-    pl_mpv_user_shader_destroy(&fsr_hook);
-    pl_mpv_user_shader_destroy(&fsrcnnx_hook_8);
-    pl_mpv_user_shader_destroy(&fsrcnnx_hook_16);
     pl_log_destroy(&placebo_log);
 }
 
@@ -5362,8 +5365,10 @@ renderer_backend_ready:
         }
         const int fg_backend_status = fg_status_backend.loadRelaxed();
         if (fg_backend_status > 0 && frame_gen) {
-            QString part = fg_backend_status == static_cast<int>(FrameGen::Backend::Dlss)
-                ? QStringLiteral("DLSS FG") : QStringLiteral("FSR FG");
+            QString part = fg_backend_status == static_cast<int>(FrameGen::Backend::Dlss) ? QStringLiteral("DLSS FG")
+                : fg_backend_status == static_cast<int>(FrameGen::Backend::Flow)
+                    ? (this->settings && this->settings->GetFrameGenFlowHighQuality() ? QStringLiteral("Flow FG HQ") : QStringLiteral("Flow FG"))
+                : QStringLiteral("FSR FG");
             const int multiplier = fg_status_multiplier.loadRelaxed();
             if (multiplier > 1) {
                 part += QStringLiteral(" %1x").arg(multiplier);
@@ -6147,6 +6152,9 @@ void QmlMainWindow::resizeSwapchain()
         return;
 
     const QSize window_size(width() * devicePixelRatio(), height() * devicePixelRatio());
+    // A minimized window has no size; textures cannot be created at 0x0.
+    if (window_size.isEmpty())
+        return;
     const bool swapchain_ready = quick_tex &&
                                  (render_backend != RenderBackend::OpenGL || quick_fbo) &&
                                  (render_backend != RenderBackend::Vulkan || quick_vk_image);
@@ -6218,6 +6226,11 @@ void QmlMainWindow::resizeSwapchain()
         return;
     }
 
+    if (new_swapchain_size.isEmpty()) {
+        // The surface reported no extent (window minimized mid-resize).
+        swapchain_recreate_pending.storeRelease(1);
+        return;
+    }
     struct pl_tex_params tex_params = {
         .w = new_swapchain_size.width(),
         .h = new_swapchain_size.height(),
@@ -6815,7 +6828,9 @@ void QmlMainWindow::render()
     int queue_depth_before_update = -1;
     struct pl_frame direct_render_frame = {};
     const struct pl_frame *direct_frames[] = { &direct_render_frame };
-    const float direct_timestamps[] = { 0.0f };
+    // pl_frame_mix::timestamps is float in older libplacebo and double in newer releases.
+    using frame_mix_timestamp_t = std::remove_cv_t<std::remove_pointer_t<decltype(pl_frame_mix::timestamps)>>;
+    const frame_mix_timestamp_t direct_timestamps[] = { 0 };
     // Set when this render presents a frame left over from frame generation.
     struct pl_frame fg_override_frame = {};
     bool fg_override = false;
@@ -7041,11 +7056,15 @@ void QmlMainWindow::render()
                 swapchain_start_failures.storeRelease(0);
                 swapchain_start_failure_first_us = 0;
             }
-            qCWarning(chiakiGui)
-                << "Failed to start Placebo frame"
-                << "consecutive_failures=" << failures
-                << "failure_duration_us=" << failure_duration_us
-                << "surface_renderable=" << surface_renderable;
+            // While hidden/minimized every video frame lands here; log once.
+            if (surface_renderable || !start_frame_hidden_logged) {
+                qCWarning(chiakiGui)
+                    << "Failed to start Placebo frame"
+                    << "consecutive_failures=" << failures
+                    << "failure_duration_us=" << failure_duration_us
+                    << "surface_renderable=" << surface_renderable;
+            }
+            start_frame_hidden_logged = !surface_renderable;
             if (surface_renderable && failures >= 60 && failure_duration_us >= 3000000) {
                 handleVulkanRendererFallback(
                     tr("Vulkan renderer stalled"),
@@ -7053,9 +7072,15 @@ void QmlMainWindow::render()
                     tr("Vulkan swapchain failed repeatedly while the window was visible. OpenGL is being used for this launch only."));
             } else {
                 swapchain_recreate_pending.storeRelease(1);
-                QMetaObject::invokeMethod(this, [this]() {
-                    scheduleUpdate(true, UpdateRequestReason::VSync);
-                }, Qt::QueuedConnection);
+                // While the window is minimized (zero size) or hidden there is
+                // nothing to recreate: retrying here every frame rebuilt a 0x0
+                // swapchain ~25 times a second. The expose/resize event that
+                // makes the window visible again triggers the next update.
+                if (surface_renderable) {
+                    QMetaObject::invokeMethod(this, [this]() {
+                        scheduleUpdate(true, UpdateRequestReason::VSync);
+                    }, Qt::QueuedConnection);
+                }
             }
             finalize_render();
             return;
@@ -7063,6 +7088,7 @@ void QmlMainWindow::render()
     }
     swapchain_start_failures.storeRelease(0);
     swapchain_start_failure_first_us = 0;
+    start_frame_hidden_logged = false;
     const qint64 start_frame_us = static_cast<qint64>(chiaki_time_now_monotonic_us());
     if (start_frame_us >= start_frame_begin_us)
     {
@@ -7557,6 +7583,14 @@ void QmlMainWindow::render()
     // appear to support alpha transaprency
     if (sw_frame.color_repr.alpha == PL_ALPHA_NONE)
         params.background_transparency = 0.0;
+#if PL_API_VER >= 355
+    // Ambient border: fill the bars around the video (e.g. 16:9 on an
+    // ultrawide display) with a heavily blurred copy of the picture.
+    if (hint_frame && has_settings && settings->GetAmbientBorder()) {
+        params.border = PL_CLEAR_BLUR;
+        params.blur_radius = 48.0f;
+    }
+#endif
 
     const struct pl_hook *fsrcnnx_hook = nullptr;
     if (hint_frame) {
@@ -7712,6 +7746,7 @@ void QmlMainWindow::render()
                     fg_crash_guard_armed = true;
                 }
             }
+            frame_gen->setFlowHighQuality(settings->GetFrameGenFlowHighQuality());
             if (multiplier >= 2 &&
                 frame_gen->process(&direct_render_frame, fg_out_w, fg_out_h, multiplier,
                                    static_cast<float>(stream_interval_s * 1000.0), fg_outputs) &&

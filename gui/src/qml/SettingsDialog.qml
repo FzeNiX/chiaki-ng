@@ -953,6 +953,28 @@ DialogView {
 
                     Label {
                         Layout.alignment: Qt.AlignRight
+                        visible: Chiaki.settings.ambientBorderSupported
+                        text: qsTr("Border Fill:")
+                    }
+
+                    C.ComboBox {
+                        Layout.preferredWidth: 400
+                        visible: Chiaki.settings.ambientBorderSupported
+                        model: [qsTr("Black"), qsTr("Ambient (blurred picture)")]
+                        currentIndex: Chiaki.settings.ambientBorder ? 1 : 0
+                        onActivated: index => Chiaki.settings.ambientBorder = index === 1
+                        ToolTip.visible: hovered
+                        ToolTip.text: qsTr("Fills the bars around the video (for example a 16:9 stream on an ultrawide display) with a blurred copy of the picture instead of black.")
+                    }
+
+                    Label {
+                        Layout.alignment: Qt.AlignRight
+                        visible: Chiaki.settings.ambientBorderSupported
+                        text: qsTr("(Black)")
+                    }
+
+                    Label {
+                        Layout.alignment: Qt.AlignRight
                         text: qsTr("Frame Delivery:")
                     }
 
@@ -1000,6 +1022,7 @@ DialogView {
                     }
 
                     C.ComboBox {
+                        id: rtxVsrCombo
                         Layout.preferredWidth: 400
                         visible: Chiaki.settings.rtxVsrSupported
                         // NGX VSR.QualityLevel for each entry
@@ -1010,9 +1033,26 @@ DialogView {
                             qsTr("Artifact Reduction High"), qsTr("Artifact Reduction Ultra"),
                             qsTr("Streaming Medium (RTX 30+)"), qsTr("Streaming Ultra (RTX 30+)")]
                         currentIndex: Math.max(0, modes.indexOf(Chiaki.settings.rtxVsrQuality))
-                        onActivated: index => Chiaki.settings.rtxVsrQuality = modes[index]
+                        // Artifact Reduction / Streaming need nvngx_vsr.dll 1.8.2+.
+                        function modeAvailable(index) {
+                            return modes[index] <= 4 || Chiaki.settings.rtxVsrExtendedModes;
+                        }
+                        onActivated: index => {
+                            if (modeAvailable(index))
+                                Chiaki.settings.rtxVsrQuality = modes[index];
+                            else
+                                currentIndex = Qt.binding(() => Math.max(0, modes.indexOf(Chiaki.settings.rtxVsrQuality)));
+                        }
+                        delegate: ItemDelegate {
+                            required property var modelData
+                            required property int index
+                            width: ListView.view ? ListView.view.width : implicitWidth
+                            enabled: rtxVsrCombo.modeAvailable(index)
+                            text: enabled ? modelData : qsTr("%1 (needs nvngx_vsr.dll 1.8.2+)").arg(modelData)
+                            highlighted: rtxVsrCombo.highlightedIndex === index
+                        }
                         ToolTip.visible: hovered
-                        ToolTip.text: qsTr("NVIDIA RTX Video on SDR streams (RTX 20 series or newer, Vulkan renderer). Needs nvngx_vsr.dll next to chiaki.exe.\nUpscale: sharper picture when the window is larger than the stream.\nArtifact Reduction: removes compression blocking and banding at stream resolution.\nStreaming: upscale plus artifact cleanup for compressed streams.\nArtifact Reduction and Streaming need nvngx_vsr.dll 1.8.2 or newer (NVIDIA VFX SDK 1.2/1.3).")
+                        ToolTip.text: qsTr("NVIDIA RTX Video on SDR streams (RTX 20 series or newer, Vulkan renderer). Needs nvngx_vsr.dll next to chiaki.exe.\nUpscale: sharper picture when the window is larger than the stream.\nArtifact Reduction: removes compression blocking and banding at stream resolution.\nStreaming: upscale plus artifact cleanup for compressed streams.\nArtifact Reduction and Streaming need nvngx_vsr.dll 1.8.2 or newer (NVIDIA VFX SDK 1.2/1.3).\nInstalled nvngx_vsr.dll: %1").arg(Chiaki.settings.rtxVsrDllVersion.length ? Chiaki.settings.rtxVsrDllVersion : qsTr("not found"))
                     }
 
                     Label {
@@ -1033,17 +1073,41 @@ DialogView {
                         enabled: Chiaki.settings.directFrameMapping
                         model: [qsTr("Off"),
                             Chiaki.settings.frameGenDlssSupported ? qsTr("NVIDIA DLSS Frame Generation") : qsTr("NVIDIA DLSS Frame Generation (not in this build)"),
-                            Chiaki.settings.frameGenFsrSupported ? qsTr("AMD FSR 3.1 Frame Generation") : qsTr("AMD FSR 3.1 Frame Generation (not in this build)")]
+                            Chiaki.settings.frameGenFsrSupported ? qsTr("AMD FSR 3.1 Frame Generation") : qsTr("AMD FSR 3.1 Frame Generation (not in this build)"),
+                            qsTr("Flow Frame Generation (any GPU)")]
                         currentIndex: Chiaki.settings.frameGenBackend
                         onActivated: index => Chiaki.settings.frameGenBackend = index
                         ToolTip.visible: hovered
-                        ToolTip.text: qsTr("Generates frames between stream frames for smoother motion (Vulkan renderer, Direct Mapping, SDR).\nAdds about half a stream frame of latency. DLSS needs an RTX 40 series or newer GPU.")
+                        ToolTip.text: qsTr("Generates frames between stream frames for smoother motion (Vulkan renderer, Direct Mapping, SDR).\nAdds about half a stream frame of latency. DLSS needs an RTX 40 series or newer GPU.\nFlow is chiaki-ng's own optical flow interpolation: any GPU, Windows and Linux (incl. Steam Deck), up to 4x.")
                     }
 
                     Label {
                         Layout.alignment: Qt.AlignRight
                         visible: Chiaki.settings.frameGenSupported
                         text: Chiaki.settings.directFrameMapping ? qsTr("(Off)") : qsTr("(needs Direct Mapping)")
+                    }
+
+                    Label {
+                        Layout.alignment: Qt.AlignRight
+                        visible: Chiaki.settings.frameGenFlowSupported
+                        text: qsTr("Flow Quality:")
+                    }
+
+                    C.ComboBox {
+                        Layout.preferredWidth: 400
+                        visible: Chiaki.settings.frameGenFlowSupported
+                        enabled: Chiaki.settings.frameGenBackend === 3
+                        model: [qsTr("Performance (1/4 resolution motion analysis)"), qsTr("Quality (1/2 resolution motion analysis)")]
+                        currentIndex: Chiaki.settings.frameGenFlowHighQuality ? 1 : 0
+                        onActivated: index => Chiaki.settings.frameGenFlowHighQuality = index === 1
+                        ToolTip.visible: hovered
+                        ToolTip.text: qsTr("Quality tracks motion around small details (HUD text, thin edges) more precisely and costs about four times the analysis GPU time. Performance suits handhelds such as the Steam Deck.")
+                    }
+
+                    Label {
+                        Layout.alignment: Qt.AlignRight
+                        visible: Chiaki.settings.frameGenFlowSupported
+                        text: qsTr("(Performance)")
                     }
 
                     Label {
@@ -1055,9 +1119,9 @@ DialogView {
                     C.ComboBox {
                         Layout.preferredWidth: 400
                         visible: Chiaki.settings.frameGenSupported
-                        enabled: Chiaki.settings.frameGenBackend === 1
-                        model: [qsTr("2x"), qsTr("3x (RTX 50 series)"), qsTr("4x (RTX 50 series)")]
-                        currentIndex: Chiaki.settings.frameGenBackend === 1 ? Chiaki.settings.frameGenMultiplier - 2 : 0
+                        enabled: Chiaki.settings.frameGenBackend === 1 || Chiaki.settings.frameGenBackend === 3
+                        model: [qsTr("2x"), qsTr("3x (DLSS on RTX 50 series, Flow)"), qsTr("4x (DLSS on RTX 50 series, Flow)")]
+                        currentIndex: (Chiaki.settings.frameGenBackend === 1 || Chiaki.settings.frameGenBackend === 3) ? Chiaki.settings.frameGenMultiplier - 2 : 0
                         onActivated: index => Chiaki.settings.frameGenMultiplier = index + 2
                         ToolTip.visible: hovered
                         ToolTip.text: qsTr("Output frames per stream frame. FSR always uses 2x; the display refresh rate also limits it.")

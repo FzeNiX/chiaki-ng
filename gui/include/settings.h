@@ -533,17 +533,25 @@ class Settings : public QObject
 			return q ? q : 4;
 		}
 		static int ValidRtxVsrQuality(int q) { return ((q >= 1 && q <= 4) || (q >= 8 && q <= 11) || q == 21 || q == 23) ? q : 0; }
-		// Frame generation backend: 0 = off, 1 = DLSS Frame Generation, 2 = FSR 3.1 Frame Generation
-		int GetFrameGenBackend() const { return qBound(0, settings.value("settings/frame_gen_backend", 0).toInt(), 2); }
+		// Frame generation backend: 0 = off, 1 = DLSS Frame Generation, 2 = FSR 3.1 Frame Generation,
+		// 3 = Flow (chiaki-ng's own, any GPU / OS)
+		int GetFrameGenBackend() const { return qBound(0, settings.value("settings/frame_gen_backend", 0).toInt(), 3); }
 		void SetFrameGenBackend(int backend)
 		{
-			backend = qBound(0, backend, 2);
+			backend = qBound(0, backend, 3);
 			settings.setValue("settings/frame_gen_backend", backend);
 			if (backend)
 				settings.setValue("settings/frame_gen_last_backend", backend);
 		}
 		// Backend restored when frame generation is switched back on from the stream menu (0 = never chosen).
-		int GetFrameGenLastBackend() const { return qBound(0, settings.value("settings/frame_gen_last_backend", 0).toInt(), 2); }
+		int GetFrameGenLastBackend() const { return qBound(0, settings.value("settings/frame_gen_last_backend", 0).toInt(), 3); }
+		// Fill the empty border around the video (ultrawide displays, Zoom off)
+		// with a blurred copy of the picture instead of black.
+		bool GetAmbientBorder() const { return settings.value("settings/ambient_border", false).toBool(); }
+		void SetAmbientBorder(bool enabled) { settings.setValue("settings/ambient_border", enabled); }
+		// Flow frame generation analysis resolution: false = 1/4 (performance), true = 1/2 (quality)
+		bool GetFrameGenFlowHighQuality() const { return settings.value("settings/frame_gen_flow_high_quality", false).toBool(); }
+		void SetFrameGenFlowHighQuality(bool high) { settings.setValue("settings/frame_gen_flow_high_quality", high); }
 		// Output frames per stream frame (2 = one generated frame per real frame)
 		int GetFrameGenMultiplier() const { return qBound(2, settings.value("settings/frame_gen_multiplier", 2).toInt(), 4); }
 		void SetFrameGenMultiplier(int multiplier) { settings.setValue("settings/frame_gen_multiplier", qBound(2, multiplier, 4)); }

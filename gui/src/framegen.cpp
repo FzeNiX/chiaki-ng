@@ -1,4 +1,5 @@
 #include "framegen.h"
+#include "flowfg.h"
 #include "ngxcore.h"
 #include "gputimer.h"
 #include "vkguard.h"
@@ -7,9 +8,9 @@
 
 Q_DECLARE_LOGGING_CATEGORY(chiakiGui);
 
-#if defined(CHIAKI_HAVE_NGX) || defined(CHIAKI_HAVE_FFX)
+// The Flow backend needs nothing beyond libplacebo, so frame generation is
+// always built; DLSS and FSR are added when their SDKs are available.
 #define CHIAKI_HAVE_FRAMEGEN 1
-#endif
 
 #if defined(CHIAKI_HAVE_FRAMEGEN)
 
@@ -113,7 +114,7 @@ struct FrameGen::Impl
 
     FrameGen::Backend backend = FrameGen::Backend::None;
     std::unique_ptr<FgBackendImpl> backend_impl;
-    std::array<bool, 3> backend_failed = {};
+    std::array<bool, 4> backend_failed = {};
     int consecutive_failures = 0;
 
     VkQueue queue = VK_NULL_HANDLE;
@@ -133,6 +134,9 @@ struct FrameGen::Impl
     int height = 0;
     bool have_history = false;
     bool reset_pending = true;
+    // Real frame of the previous call (Flow interpolates from it).
+    FgImage *last_real = nullptr;
+    bool flow_high_quality = false;
     // The first calls after a backend starts are logged step by step.
     int trace_frames = 0;
 
@@ -346,6 +350,7 @@ void FrameGen::Impl::destroyImages()
     destroyImage(mvec);
     destroyImage(depth);
     width = height = 0;
+    last_real = nullptr;
 }
 
 bool FrameGen::Impl::fillConstant(FgImage &img, const float value[4], const void *texel, size_t texel_size)
@@ -948,6 +953,34 @@ private:
 
 #endif // CHIAKI_HAVE_FFX
 
+namespace {
+
+// Runs entirely on libplacebo (no raw Vulkan recording), see FrameGen::process.
+class FlowBackend : public FgBackendImpl
+{
+public:
+    std::unique_ptr<FlowInterpolator> interp;
+
+    bool init(FrameGen::Impl &fg) override
+    {
+        interp = std::make_unique<FlowInterpolator>(fg.log, fg.gpu);
+        return interp->init();
+    }
+    int maxGenerated() const override { return kMaxGenerated; }
+    bool record(FrameGen::Impl &, VkCommandBuffer, FgImage &, FgImage *const *, int, bool, float) override
+    {
+        return false;
+    }
+    void invalidate() override
+    {
+        if (interp)
+            interp->invalidate();
+    }
+    void shutdown() override { interp.reset(); }
+};
+
+} // namespace
+
 bool FrameGen::compiledIn()
 {
     return true;
@@ -962,6 +995,7 @@ bool FrameGen::backendCompiledIn(Backend backend)
 #if defined(CHIAKI_HAVE_FFX)
     case Backend::Fsr: return true;
 #endif
+    case Backend::Flow: return true;
     default: return false;
     }
 }
@@ -971,6 +1005,7 @@ const char *FrameGen::backendName(Backend backend)
     switch (backend) {
     case Backend::Dlss: return "DLSS Frame Generation";
     case Backend::Fsr: return "FSR 3.1 Frame Generation";
+    case Backend::Flow: return "Flow Frame Generation";
     default: return "None";
     }
 }
@@ -1013,6 +1048,7 @@ bool FrameGen::ensureInitialized(pl_vulkan vk, Backend backend)
 #if defined(CHIAKI_HAVE_FFX)
     case Backend::Fsr: impl_backend = std::make_unique<FsrBackend>(); break;
 #endif
+    case Backend::Flow: impl_backend = std::make_unique<FlowBackend>(); break;
     default: break;
     }
     unsigned long seh_code = 0;
@@ -1051,6 +1087,10 @@ bool FrameGen::backendFailed(Backend backend) const
 
 float FrameGen::gpuTimeMs() const
 {
+    if (impl->backend == Backend::Flow && impl->backend_impl) {
+        const auto *flow = static_cast<const FlowBackend *>(impl->backend_impl.get());
+        return flow->interp ? flow->interp->gpuTimeMs() : 0.0f;
+    }
     return impl->timer.averageMs();
 }
 
@@ -1062,6 +1102,11 @@ int FrameGen::maxMultiplier() const
 void FrameGen::reset()
 {
     impl->reset_pending = true;
+}
+
+void FrameGen::setFlowHighQuality(bool high)
+{
+    impl->flow_high_quality = high;
 }
 
 void FrameGen::destroy()
@@ -1122,6 +1167,48 @@ bool FrameGen::process(const struct pl_frame *src, int out_w, int out_h, int mul
         return false;
     }
     trace_step("input rendered");
+
+    if (d.backend == FrameGen::Backend::Flow) {
+        auto *flow = static_cast<FlowBackend *>(d.backend_impl.get());
+        const int scale = d.flow_high_quality ? 2 : 4;
+        if (flow->interp->analysisScale() != scale) {
+            flow->interp->setAnalysisScale(scale);
+            qCInfo(chiakiGui) << "[framegen] Flow quality:" << (d.flow_high_quality ? "high (1/2 resolution analysis)" : "performance (1/4 resolution analysis)");
+        }
+        const bool flow_reset = d.reset_pending || !d.have_history || !d.last_real;
+        pl_tex flow_out[kMaxGenerated] = {};
+        float times[kMaxGenerated] = {};
+        for (int i = 0; i < count; i++) {
+            flow_out[i] = set.generated[static_cast<size_t>(i)].tex;
+            times[i] = static_cast<float>(i + 1) / static_cast<float>(count + 1);
+        }
+        const bool flow_ok = flow->interp->interpolate(flow_reset ? nullptr : d.last_real->tex, set.real.tex,
+                                                       flow_out, times, flow_reset ? 0 : count);
+        trace_step(flow_ok ? "flow frames generated" : "flow generation failed");
+        if (!flow_ok) {
+            d.have_history = false;
+            d.last_real = nullptr;
+            if (++d.consecutive_failures >= kMaxConsecutiveFailures) {
+                qCWarning(chiakiGui) << "[framegen] Disabling" << backendName(d.backend) << "after repeated failures";
+                d.backend_failed[static_cast<size_t>(d.backend)] = true;
+                d.destroyBackend();
+            }
+            return false;
+        }
+        d.consecutive_failures = 0;
+        d.have_history = true;
+        d.reset_pending = false;
+        d.last_real = &set.real;
+        if (!flow_reset) {
+            for (int i = 0; i < count; i++) {
+                outputs.emplace_back();
+                Impl::fillFrame(set.generated[static_cast<size_t>(i)], &outputs.back());
+            }
+        }
+        outputs.emplace_back();
+        Impl::fillFrame(set.real, &outputs.back());
+        return true;
+    }
 
     const uint32_t slot_index = static_cast<uint32_t>(d.next_slot);
     Impl::CommandSlot &slot = d.cmd_slots[d.next_slot];
@@ -1211,6 +1298,7 @@ bool FrameGen::process(const struct pl_frame *src, int out_w, int out_h, int mul
     d.consecutive_failures = 0;
     d.have_history = true;
     d.reset_pending = false;
+    d.last_real = &set.real;
 
     if (!reset) {
         for (int i = 0; i < count; i++) {
@@ -1238,6 +1326,7 @@ bool FrameGen::backendFailed(Backend) const { return true; }
 int FrameGen::maxMultiplier() const { return 1; }
 float FrameGen::gpuTimeMs() const { return 0.0f; }
 void FrameGen::reset() {}
+void FrameGen::setFlowHighQuality(bool) {}
 void FrameGen::destroy() {}
 bool FrameGen::process(const struct pl_frame *, int, int, int, float, std::vector<struct pl_frame> &) { return false; }
 

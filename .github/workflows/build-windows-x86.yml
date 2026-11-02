@@ -2,6 +2,8 @@ name: Build chiaki-ng Windows x86_64 (VC)
 
 on:
   workflow_dispatch:
+  # Called by release-rtx.yml to build release packages.
+  workflow_call:
   push:
     branches:
       - claude/happy-gauss-7i9rwm

@@ -1006,7 +1006,14 @@ void QmlSettings::setRtxVsrQuality(int quality)
 
 void QmlSettings::toggleRtxVsr()
 {
-    setRtxVsrQuality(settings->GetRtxVsrQuality() ? 0 : settings->GetRtxVsrLastQuality());
+    if (settings->GetRtxVsrQuality()) {
+        setRtxVsrQuality(0);
+        return;
+    }
+    int quality = settings->GetRtxVsrLastQuality();
+    if (RtxVsr::isExtendedQuality(quality) && !RtxVsr::extendedModesAvailable())
+        quality = 4;
+    setRtxVsrQuality(quality);
 }
 
 void QmlSettings::toggleFrameGen()
@@ -1017,13 +1024,23 @@ void QmlSettings::toggleFrameGen()
     }
     int backend = settings->GetFrameGenLastBackend();
     if (!backend || !FrameGen::backendCompiledIn(static_cast<FrameGen::Backend>(backend)))
-        backend = FrameGen::backendCompiledIn(FrameGen::Backend::Dlss) ? 1 : 2;
+        backend = FrameGen::backendCompiledIn(FrameGen::Backend::Dlss) ? 1 : 3;
     setFrameGenBackend(backend);
 }
 
 bool QmlSettings::rtxVsrSupported() const
 {
     return RtxVsr::compiledIn();
+}
+
+bool QmlSettings::rtxVsrExtendedModes() const
+{
+    return RtxVsr::extendedModesAvailable();
+}
+
+QString QmlSettings::rtxVsrDllVersion() const
+{
+    return RtxVsr::dllVersion();
 }
 
 int QmlSettings::frameGenBackend() const
@@ -1060,6 +1077,46 @@ bool QmlSettings::frameGenSupported() const
 bool QmlSettings::frameGenDlssSupported() const
 {
     return FrameGen::backendCompiledIn(FrameGen::Backend::Dlss);
+}
+
+bool QmlSettings::frameGenFlowSupported() const
+{
+    return FrameGen::backendCompiledIn(FrameGen::Backend::Flow);
+}
+
+bool QmlSettings::ambientBorder() const
+{
+    return settings->GetAmbientBorder();
+}
+
+void QmlSettings::setAmbientBorder(bool enabled)
+{
+    if (enabled == settings->GetAmbientBorder())
+        return;
+    settings->SetAmbientBorder(enabled);
+    emit ambientBorderChanged();
+}
+
+bool QmlSettings::ambientBorderSupported() const
+{
+#if PL_API_VER >= 355
+    return true;
+#else
+    return false;
+#endif
+}
+
+bool QmlSettings::frameGenFlowHighQuality() const
+{
+    return settings->GetFrameGenFlowHighQuality();
+}
+
+void QmlSettings::setFrameGenFlowHighQuality(bool high)
+{
+    if (high == settings->GetFrameGenFlowHighQuality())
+        return;
+    settings->SetFrameGenFlowHighQuality(high);
+    emit frameGenFlowHighQualityChanged();
 }
 
 bool QmlSettings::frameGenFsrSupported() const

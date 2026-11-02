@@ -60,6 +60,8 @@ set(SOURCE_FILES
 	src/rtxvsr.cpp
 	include/framegen.h
 	src/framegen.cpp
+	include/flowfg.h
+	src/flowfg.cpp
 	include/systemdinhibit.h
 	src/systemdinhibit.cpp
 	)
@@ -110,8 +112,8 @@ target_link_libraries(chiaki PkgConfig::LIBPLACEBO placebo-libav-impl)
 
 target_link_libraries(chiaki chiaki-lib)
 if(WIN32)
-	# Stream tuning: MMCSS (avrt) and timer resolution (winmm).
-	target_link_libraries(chiaki avrt winmm)
+	# Stream tuning: MMCSS (avrt) and timer resolution (winmm); version for reading nvngx_vsr.dll file version.
+	target_link_libraries(chiaki avrt winmm version)
 endif()
 
 if(CHIAKI_ENABLE_NGX)

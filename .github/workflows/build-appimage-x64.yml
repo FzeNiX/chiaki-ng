@@ -2,6 +2,11 @@ name: Build chiaki-ng Appimage x86_64
 
 on:
   workflow_dispatch:
+  # Called by release-rtx.yml to build release packages.
+  workflow_call:
+  push:
+    branches:
+      - claude/happy-gauss-7i9rwm
 
 jobs:
   build-appimage_x64:

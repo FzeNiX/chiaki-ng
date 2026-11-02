@@ -102,11 +102,17 @@ class QmlSettings : public QObject
 	Q_PROPERTY(bool directFrameMapping READ directFrameMapping WRITE setDirectFrameMapping NOTIFY directFrameMappingChanged)
 	Q_PROPERTY(int rtxVsrQuality READ rtxVsrQuality WRITE setRtxVsrQuality NOTIFY rtxVsrQualityChanged)
 	Q_PROPERTY(bool rtxVsrSupported READ rtxVsrSupported CONSTANT)
+	Q_PROPERTY(bool rtxVsrExtendedModes READ rtxVsrExtendedModes CONSTANT)
+	Q_PROPERTY(QString rtxVsrDllVersion READ rtxVsrDllVersion CONSTANT)
 	Q_PROPERTY(int frameGenBackend READ frameGenBackend WRITE setFrameGenBackend NOTIFY frameGenBackendChanged)
 	Q_PROPERTY(int frameGenMultiplier READ frameGenMultiplier WRITE setFrameGenMultiplier NOTIFY frameGenMultiplierChanged)
 	Q_PROPERTY(bool frameGenSupported READ frameGenSupported CONSTANT)
 	Q_PROPERTY(bool frameGenDlssSupported READ frameGenDlssSupported CONSTANT)
 	Q_PROPERTY(bool frameGenFsrSupported READ frameGenFsrSupported CONSTANT)
+	Q_PROPERTY(bool frameGenFlowSupported READ frameGenFlowSupported CONSTANT)
+	Q_PROPERTY(bool ambientBorder READ ambientBorder WRITE setAmbientBorder NOTIFY ambientBorderChanged)
+	Q_PROPERTY(bool ambientBorderSupported READ ambientBorderSupported CONSTANT)
+	Q_PROPERTY(bool frameGenFlowHighQuality READ frameGenFlowHighQuality WRITE setFrameGenFlowHighQuality NOTIFY frameGenFlowHighQualityChanged)
 	Q_PROPERTY(bool placeboDeinterlaceEnabled READ placeboDeinterlaceEnabled WRITE setPlaceboDeinterlaceEnabled NOTIFY placeboDeinterlaceEnabledChanged)
 	Q_PROPERTY(int placeboDeinterlacePreset READ placeboDeinterlacePreset WRITE setPlaceboDeinterlacePreset NOTIFY placeboDeinterlacePresetChanged)
 	Q_PROPERTY(int placeboDeinterlaceAlgorithm READ placeboDeinterlaceAlgorithm WRITE setPlaceboDeinterlaceAlgorithm NOTIFY placeboDeinterlaceAlgorithmChanged)
@@ -359,6 +365,8 @@ public:
     Q_INVOKABLE void toggleRtxVsr();
     Q_INVOKABLE void toggleFrameGen();
     bool rtxVsrSupported() const;
+    bool rtxVsrExtendedModes() const;
+    QString rtxVsrDllVersion() const;
     int frameGenBackend() const;
     void setFrameGenBackend(int backend);
     int frameGenMultiplier() const;
@@ -366,6 +374,12 @@ public:
     bool frameGenSupported() const;
     bool frameGenDlssSupported() const;
     bool frameGenFsrSupported() const;
+    bool frameGenFlowSupported() const;
+    bool ambientBorder() const;
+    void setAmbientBorder(bool enabled);
+    bool ambientBorderSupported() const;
+    bool frameGenFlowHighQuality() const;
+    void setFrameGenFlowHighQuality(bool high);
     void setPlaceboFrameMixer(int mixer);
 
     bool placeboDeinterlaceEnabled() const;
@@ -631,6 +645,8 @@ public:
     Q_INVOKABLE QString stringForStreamMenuShortcut() const;
 
 signals:
+    void frameGenFlowHighQualityChanged();
+    void ambientBorderChanged();
     void resolutionLocalPS4Changed();
     void resolutionRemotePS4Changed();
     void resolutionLocalPS5Changed();

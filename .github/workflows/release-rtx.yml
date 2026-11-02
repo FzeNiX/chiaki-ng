@@ -1,0 +1,60 @@
+name: Release chiaki-ng RTX build
+
+# Push a tag such as 1.10.0-rtx.1 to build Windows and Linux packages and
+# publish them as a GitHub pre-release. Tags must not start with "v": v*.*.*
+# tags trigger the upstream multi-platform release workflow (build-release.yaml).
+on:
+  push:
+    tags:
+      - '*-rtx.*'
+  # To rebuild an existing tag: Actions > this workflow > Run workflow, and pick
+  # the tag (not a branch) under "Use workflow from".
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  windows:
+    uses: ./.github/workflows/build-windows-x86.yml
+
+  linux:
+    uses: ./.github/workflows/build-appimage-x64.yml
+
+  publish:
+    name: Publish release
+    needs: [windows, linux]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    if: github.ref_type == 'tag'
+    env:
+      TAG: ${{ github.ref_name }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Rename packages after the tag
+        run: |
+          set -euo pipefail
+          mkdir release
+          cp artifacts/chiaki-ng-win_x64-VC-Release/*.zip "release/chiaki-ng-${TAG}-win_x64-portable.zip"
+          cp artifacts/chiaki-ng-win_x64-VC-installer.zip/chiaki-ng-windows-installer.exe "release/chiaki-ng-${TAG}-win_x64-setup.exe"
+          cp artifacts/chiaki-ng.AppImage_x86_64/chiaki-ng.AppImage "release/chiaki-ng-${TAG}-linux_x86_64.AppImage"
+          chmod +x release/*.AppImage
+          (cd release && sha256sum * > SHA256SUMS.txt)
+          ls -l release
+
+      - name: Publish GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.TAG }}
+          name: chiaki-ng ${{ env.TAG }}
+          body_path: .github/RELEASE_NOTES.md
+          prerelease: true
+          fail_on_unmatched_files: true
+          files: release/*
