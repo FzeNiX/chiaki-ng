@@ -5367,7 +5367,7 @@ renderer_backend_ready:
         if (fg_backend_status > 0 && frame_gen) {
             QString part = fg_backend_status == static_cast<int>(FrameGen::Backend::Dlss) ? QStringLiteral("DLSS FG")
                 : fg_backend_status == static_cast<int>(FrameGen::Backend::Flow)
-                    ? (settings && settings->GetFrameGenFlowHighQuality() ? QStringLiteral("Flow FG HQ") : QStringLiteral("Flow FG"))
+                    ? (this->settings && this->settings->GetFrameGenFlowHighQuality() ? QStringLiteral("Flow FG HQ") : QStringLiteral("Flow FG"))
                 : QStringLiteral("FSR FG");
             const int multiplier = fg_status_multiplier.loadRelaxed();
             if (multiplier > 1) {
