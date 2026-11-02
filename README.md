@@ -28,6 +28,7 @@ Test builds of every commit are available as artifacts of the *Build chiaki-ng W
 | **DLSS Frame Generation** – 2x, 3x/4x on RTX 50 series | Windows | NVIDIA RTX 40 series or newer | Settings → Video → Frame Generation |
 | **FSR 3.1 Frame Generation** – 2x | Windows | any Vulkan GPU | Settings → Video → Frame Generation |
 | **Flow Frame Generation** – chiaki-ng's own optical flow interpolation, 2x–4x | Windows, Linux, Steam Deck | any Vulkan GPU | Settings → Video → Frame Generation |
+| **AMD RCAS sharpening** – contrast adaptive sharpening of the final picture with a strength slider; works after upscaling, RTX VSR and frame generation, also at 1:1 | all | any | Settings → Video → Sharpening (AMD RCAS) |
 | **Ambient border** – fills the bars around the video (e.g. 16:9 on an ultrawide display) with a blurred copy of the picture | all | any | Settings → Video → Border Fill |
 
 Notes:

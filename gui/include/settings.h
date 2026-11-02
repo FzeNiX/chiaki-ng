@@ -545,6 +545,9 @@ class Settings : public QObject
 		}
 		// Backend restored when frame generation is switched back on from the stream menu (0 = never chosen).
 		int GetFrameGenLastBackend() const { return qBound(0, settings.value("settings/frame_gen_last_backend", 0).toInt(), 3); }
+		// AMD RCAS sharpening of the final image: 0 = off, 1-100 = strength in percent
+		int GetRcasStrength() const { return qBound(0, settings.value("settings/rcas_strength", 0).toInt(), 100); }
+		void SetRcasStrength(int strength) { settings.setValue("settings/rcas_strength", qBound(0, strength, 100)); }
 		// Fill the empty border around the video (ultrawide displays, Zoom off)
 		// with a blurred copy of the picture instead of black.
 		bool GetAmbientBorder() const { return settings.value("settings/ambient_border", false).toBool(); }

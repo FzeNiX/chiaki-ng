@@ -1084,6 +1084,19 @@ bool QmlSettings::frameGenFlowSupported() const
     return FrameGen::backendCompiledIn(FrameGen::Backend::Flow);
 }
 
+int QmlSettings::rcasStrength() const
+{
+    return settings->GetRcasStrength();
+}
+
+void QmlSettings::setRcasStrength(int strength)
+{
+    if (strength == settings->GetRcasStrength())
+        return;
+    settings->SetRcasStrength(strength);
+    emit rcasStrengthChanged();
+}
+
 bool QmlSettings::ambientBorder() const
 {
     return settings->GetAmbientBorder();

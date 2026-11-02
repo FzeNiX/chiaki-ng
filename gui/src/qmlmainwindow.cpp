@@ -2708,6 +2708,7 @@ QmlMainWindow::~QmlMainWindow()
     pl_mpv_user_shader_destroy(&fsr_hook);
     pl_mpv_user_shader_destroy(&fsrcnnx_hook_8);
     pl_mpv_user_shader_destroy(&fsrcnnx_hook_16);
+    pl_mpv_user_shader_destroy(&rcas_hook);
     if (render_backend == RenderBackend::Vulkan) {
         pl_vulkan_destroy(&placebo_vulkan);
         pl_vk_inst_destroy(&placebo_vk_inst);
@@ -5384,6 +5385,9 @@ renderer_backend_ready:
             }
             parts << part;
         }
+        const int rcas_strength_status = rcas_status_strength.loadRelaxed();
+        if (rcas_strength_status > 0)
+            parts << QStringLiteral("RCAS %1%").arg(rcas_strength_status);
         const QString status = parts.join(QStringLiteral(" · "));
         if (status != video_enhancement_status) {
             video_enhancement_status = status;
@@ -5397,6 +5401,7 @@ renderer_backend_ready:
     this->fsr_hook = load_mpv_hook(placeboGpu(), QStringLiteral(":/shaders/FSR.glsl"));
     this->fsrcnnx_hook_8 = load_mpv_hook(placeboGpu(), QStringLiteral(":/shaders/FSRCNNX_x2_8-0-4-1.glsl"));
     this->fsrcnnx_hook_16 = load_mpv_hook(placeboGpu(), QStringLiteral(":/shaders/FSRCNNX_x2_16-0-4-1.glsl"));
+    this->rcas_hook = load_mpv_hook(placeboGpu(), QStringLiteral(":/shaders/RCAS.glsl"));
 
 
     switch (settings->GetPlaceboPreset()) {
@@ -7604,10 +7609,28 @@ void QmlMainWindow::render()
                                                fsr_hook, fsrcnnx_hook_8, fsrcnnx_hook_16);
         }
     }
-    const struct pl_hook *active_hooks[] = {fsrcnnx_hook};
-    if (fsrcnnx_hook) {
+    const struct pl_hook *active_hooks[2] = {};
+    int num_active_hooks = 0;
+    if (fsrcnnx_hook)
+        active_hooks[num_active_hooks++] = fsrcnnx_hook;
+    // AMD RCAS on the final image: after scaling, RTX VSR and frame
+    // generation, so it also sharpens 1:1 output.
+    const int rcas_strength = has_settings ? settings->GetRcasStrength() : 0;
+    if (hint_frame && rcas_hook && rcas_strength > 0) {
+        // 100% = 0 stops (strongest RCAS), 1% = ~2.5 stops (very light).
+        const float stops = 2.5f * (1.0f - static_cast<float>(rcas_strength) / 100.0f);
+        for (int i = 0; i < rcas_hook->num_parameters; i++) {
+            if (qstrcmp(rcas_hook->parameters[i].name, "rcas_stops") == 0)
+                rcas_hook->parameters[i].data->f = stops;
+        }
+        active_hooks[num_active_hooks++] = rcas_hook;
+    }
+    rcas_status_strength.storeRelaxed(hint_frame && rcas_hook ? rcas_strength : 0);
+    if (num_active_hooks) {
         params.hooks = active_hooks;
-        params.num_hooks = 1;
+        params.num_hooks = num_active_hooks;
+    }
+    if (fsrcnnx_hook) {
         switch (video_preset) {
         case VideoPreset::HighQualitySpatial:
             if (fsrcnnx_hook == fsr_hook)

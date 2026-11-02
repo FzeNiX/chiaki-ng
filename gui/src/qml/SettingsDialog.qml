@@ -953,6 +953,35 @@ DialogView {
 
                     Label {
                         Layout.alignment: Qt.AlignRight
+                        text: qsTr("Sharpening (AMD RCAS):")
+                    }
+
+                    C.Slider {
+                        Layout.preferredWidth: 200
+                        from: 0
+                        to: 100
+                        stepSize: 5
+                        value: Chiaki.settings.rcasStrength
+                        onMoved: Chiaki.settings.rcasStrength = value
+                        ToolTip.visible: hovered
+                        ToolTip.text: qsTr("Contrast adaptive sharpening of the final picture, after upscaling, RTX Video and frame generation (also at 1:1). 0 = off. Lower it if edges look harsh or compression noise shows; RTX Video already sharpens a little.")
+                        Label {
+                            anchors {
+                                left: parent.right
+                                verticalCenter: parent.verticalCenter
+                                leftMargin: 10
+                            }
+                            text: parent.value > 0 ? qsTr("%1%").arg(parent.value.toFixed(0)) : qsTr("Off")
+                        }
+                    }
+
+                    Label {
+                        Layout.alignment: Qt.AlignRight
+                        text: qsTr("(Off)")
+                    }
+
+                    Label {
+                        Layout.alignment: Qt.AlignRight
                         visible: Chiaki.settings.ambientBorderSupported
                         text: qsTr("Border Fill:")
                     }

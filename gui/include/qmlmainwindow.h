@@ -333,6 +333,8 @@ private:
     // Written by the render thread, shown in the stats overlay.
     // Configured RTX VSR mode (0 = off) and its state: 1 active, 2 idle, 3 mode unsupported.
     QAtomicInteger<int> vsr_status_quality = 0;
+    // RCAS sharpening strength in use (0 = off), for the stats overlay.
+    QAtomicInteger<int> rcas_status_strength = 0;
     QAtomicInteger<int> vsr_status_state = 0;
     // Configured frame generation backend (0 = off), active multiplier (0 =
     // inactive) and why it is inactive: 1 needs Direct Mapping, 2 unavailable.
@@ -505,6 +507,8 @@ private:
     const struct pl_hook *fsr_hook = nullptr;
     const struct pl_hook *fsrcnnx_hook_8 = nullptr;
     const struct pl_hook *fsrcnnx_hook_16 = nullptr;
+    // AMD RCAS sharpening on the final output (strength from settings).
+    const struct pl_hook *rcas_hook = nullptr;
 
     struct {
         PFN_vkGetDeviceProcAddr vkGetDeviceProcAddr;

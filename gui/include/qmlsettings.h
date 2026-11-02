@@ -111,6 +111,7 @@ class QmlSettings : public QObject
 	Q_PROPERTY(bool frameGenFsrSupported READ frameGenFsrSupported CONSTANT)
 	Q_PROPERTY(bool frameGenFlowSupported READ frameGenFlowSupported CONSTANT)
 	Q_PROPERTY(bool ambientBorder READ ambientBorder WRITE setAmbientBorder NOTIFY ambientBorderChanged)
+	Q_PROPERTY(int rcasStrength READ rcasStrength WRITE setRcasStrength NOTIFY rcasStrengthChanged)
 	Q_PROPERTY(bool ambientBorderSupported READ ambientBorderSupported CONSTANT)
 	Q_PROPERTY(bool frameGenFlowHighQuality READ frameGenFlowHighQuality WRITE setFrameGenFlowHighQuality NOTIFY frameGenFlowHighQualityChanged)
 	Q_PROPERTY(bool placeboDeinterlaceEnabled READ placeboDeinterlaceEnabled WRITE setPlaceboDeinterlaceEnabled NOTIFY placeboDeinterlaceEnabledChanged)
@@ -376,6 +377,8 @@ public:
     bool frameGenFsrSupported() const;
     bool frameGenFlowSupported() const;
     bool ambientBorder() const;
+    int rcasStrength() const;
+    void setRcasStrength(int strength);
     void setAmbientBorder(bool enabled);
     bool ambientBorderSupported() const;
     bool frameGenFlowHighQuality() const;
@@ -647,6 +650,7 @@ public:
 signals:
     void frameGenFlowHighQualityChanged();
     void ambientBorderChanged();
+    void rcasStrengthChanged();
     void resolutionLocalPS4Changed();
     void resolutionRemotePS4Changed();
     void resolutionLocalPS5Changed();
