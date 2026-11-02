@@ -1,9 +1,6 @@
 #include "qmlmainwindow.h"
 #include "rtxvsr.h"
 #include "framegen.h"
-#ifdef Q_OS_WIN
-#include "windowsStreamTuning.h"
-#endif
 #include "qmlbackend.h"
 #include "qmlsvgprovider.h"
 #include "chiaki/log.h"
@@ -5296,10 +5293,11 @@ renderer_backend_ready:
 
         quick_render->prepareThread(render_thread);
         quick_render->moveToThread(render_thread);
-#ifdef Q_OS_WIN
-        // The render thread paces presentation; keep it from waking late.
-        QMetaObject::invokeMethod(quick_render, []() { setCurrentThreadGamePriority(); }, Qt::QueuedConnection);
-#endif
+        // The Qt Quick render thread keeps its normal priority: raising it to
+        // MMCSS "Games" let it run ahead of the GUI thread while the window
+        // moved between screens with different scaling (rebuilding the
+        // swapchain and Qt Quick render target), which crashed on a queued
+        // call. Only the network threads get the MMCSS boost.
     }
 
     connect(quick_render, &QQuickRenderControl::sceneChanged, this, [this]() {

@@ -46,7 +46,7 @@ Notes:
 
 ### Streaming and stability
 
-- Windows tuning while streaming: qWAVE QoS on the stream sockets (audio/video traffic class), MMCSS "Games" priority for the network and render threads, 1 ms timer resolution, no power throttling.
+- Windows tuning while streaming: qWAVE QoS on the stream sockets (audio/video traffic class), MMCSS "Games" priority for the network threads, 1 ms timer resolution, no power throttling.
 - Fixed the packet loss statistic when sequence numbers wrap around.
 - Fixed a swapchain rebuild loop (and log flood) while the window is minimized.
 - Crash guard: if the app crashes while frame generation starts, it is turned off on the next launch.
