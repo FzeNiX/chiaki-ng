@@ -15,6 +15,7 @@ Window {
     signal closeRequested()
     signal displaySettingsRequested()
     signal placeboSettingsRequested()
+    signal enhancementSettingsRequested()
     signal mainViewRequested()
     signal closeAnimationFinished()
 
@@ -322,7 +323,7 @@ Window {
                 icon.source: "qrc:/icons/settings-20px.svg"
                 onClicked: streamMenuWindow.displaySettingsRequested()
                 KeyNavigation.left: customButton
-                KeyNavigation.right: Chiaki.window.videoPreset == ChiakiWindow.VideoPreset.Custom ? placeboSettingsButton : displaySettingsButton
+                KeyNavigation.right: Chiaki.window.videoPreset == ChiakiWindow.VideoPreset.Custom ? placeboSettingsButton : enhancementSettingsButton
                 Keys.onReturnPressed: clicked()
                 Keys.onEscapePressed: streamMenuWindow.closeRequested()
             }
@@ -336,6 +337,20 @@ Window {
                 visible: Chiaki.window.videoPreset == ChiakiWindow.VideoPreset.Custom
                 onClicked: streamMenuWindow.placeboSettingsRequested()
                 KeyNavigation.left: displaySettingsButton
+                KeyNavigation.right: enhancementSettingsButton
+                Keys.onReturnPressed: clicked()
+                Keys.onEscapePressed: streamMenuWindow.closeRequested()
+            }
+
+            ToolButton {
+                id: enhancementSettingsButton
+                text: qsTr("Enhancement")
+                icon.source: "qrc:/icons/settings-20px.svg"
+                padding: 10
+                checkable: false
+                // RTX VSR, frame generation, RCAS and border fill while streaming.
+                onClicked: streamMenuWindow.enhancementSettingsRequested()
+                KeyNavigation.left: placeboSettingsButton.visible ? placeboSettingsButton : displaySettingsButton
                 Keys.onReturnPressed: clicked()
                 Keys.onEscapePressed: streamMenuWindow.closeRequested()
             }

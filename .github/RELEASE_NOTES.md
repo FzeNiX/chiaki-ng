@@ -19,7 +19,7 @@ RTX Video Super Resolution, DLSS and FSR Frame Generation are **Windows only**. 
   - **Flow Frame Generation** (any Vulkan GPU, Windows + Linux), 2x–4x – chiaki-ng's own optical flow interpolation, no extra runtime
 
   Needs Frame Mapping = Direct Mapping and a display running at least twice the stream frame rate (e.g. 120 Hz for 60 fps).
-- **Stream menu (Ctrl+O)**: switch RTX VSR and Frame Gen on/off while streaming.
+- **Enhancement panel (Ctrl+O → Enhancement)**: RTX VSR mode, frame generation backend / multiplier / Flow quality, RCAS strength and border fill, changed live without leaving the stream.
 - **Stats overlay**: stream fps / display fps, RTX VSR / Frame Gen status and GPU time.
 - **Disconnect dialog**: Cancel button and × to keep streaming.
 

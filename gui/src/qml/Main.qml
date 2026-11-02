@@ -50,7 +50,7 @@ Item {
         const loader = useSeparateStreamSettingsWindows ? separateDisplaySettingsLoader : displaySettingsLoader;
         if(loader.status == Loader.Ready)
         {
-            if(placeboSettingsRect.opacity || displaySettingsRect.opacity || colorMappingSettingsRect.opacity)
+            if(root.streamSettingsOpen())
                 closeDialog();
             displaySettingsRect.opacity = 0.8;
             grabInput(loader);
@@ -64,13 +64,37 @@ Item {
             }
         }
     }
+    function streamSettingsOpen() {
+        return placeboSettingsRect.opacity || displaySettingsRect.opacity || colorMappingSettingsRect.opacity || enhancementSettingsRect.opacity;
+    }
+
+    function openEnhancementSettings() {
+        useSeparateStreamSettingsWindows = preferSeparateStreamSettingsWindows;
+        const loader = useSeparateStreamSettingsWindows ? separateEnhancementSettingsLoader : enhancementSettingsLoader;
+        if(loader.status == Loader.Ready)
+        {
+            if(root.streamSettingsOpen())
+                closeDialog();
+            enhancementSettingsRect.opacity = 0.8;
+            grabInput(loader);
+            if (!loader.item.restoreFocusItem) {
+                let item = loader.item.mainItem.nextItemInFocusChain();
+                if (item)
+                    item.forceActiveFocus(Qt.TabFocusReason);
+            } else {
+                loader.item.restoreFocusItem.forceActiveFocus(Qt.TabFocusReason);
+                loader.item.restoreFocusItem = null;
+            }
+        }
+    }
+
     function openPlaceboSettings() {
-        if (!displaySettingsRect.opacity && !placeboSettingsRect.opacity && !colorMappingSettingsRect.opacity)
+        if (!root.streamSettingsOpen())
             useSeparateStreamSettingsWindows = preferSeparateStreamSettingsWindows;
         const loader = useSeparateStreamSettingsWindows ? separatePlaceboSettingsLoader : placeboSettingsLoader;
         if(loader.status == Loader.Ready)
         {
-            if(placeboSettingsRect.opacity || displaySettingsRect.opacity || colorMappingSettingsRect.opacity)
+            if(root.streamSettingsOpen())
                 closeDialog();
             placeboSettingsRect.opacity = 0.8;
             grabInput(loader);
@@ -86,7 +110,14 @@ Item {
     }
 
     function closeDialog() {
-       if(displaySettingsRect.opacity) {
+       if(enhancementSettingsRect.opacity) {
+        enhancementSettingsRect.opacity = 0.0;
+        const loader = useSeparateStreamSettingsWindows ? separateEnhancementSettingsLoader : enhancementSettingsLoader;
+        loader.item.restoreFocusItem = Window.window.activeFocusItem;
+        releaseInput();
+        useSeparateStreamSettingsWindows = false;
+       }
+       else if(displaySettingsRect.opacity) {
         displaySettingsRect.opacity = 0.0;
         const loader = useSeparateStreamSettingsWindows ? separateDisplaySettingsLoader : displaySettingsLoader;
         loader.item.restoreFocusItem = Window.window.activeFocusItem;
@@ -112,7 +143,14 @@ Item {
     }
 
     function showMainView() {
-        if(displaySettingsRect.opacity) {
+        if(enhancementSettingsRect.opacity) {
+            enhancementSettingsRect.opacity = 0.0;
+            const loader = useSeparateStreamSettingsWindows ? separateEnhancementSettingsLoader : enhancementSettingsLoader;
+            loader.item.restoreFocusItem = Window.window.activeFocusItem;
+            releaseInput();
+            useSeparateStreamSettingsWindows = false;
+        }
+        else if(displaySettingsRect.opacity) {
             displaySettingsRect.opacity = 0.0;
             const loader = useSeparateStreamSettingsWindows ? separateDisplaySettingsLoader : displaySettingsLoader;
             loader.item.restoreFocusItem = Window.window.activeFocusItem;
@@ -311,6 +349,21 @@ Item {
         }
     }
     Rectangle {
+        id: enhancementSettingsRect
+        opacity: 0.0
+        anchors.top: parent.top
+        anchors.horizontalCenter: parent.horizontalCenter
+        height: enhancementSettingsLoader.item ? Math.min(root.height, enhancementSettingsLoader.item.gridHeight + 140) : 560
+        width: 1200
+        visible: opacity && !useSeparateStreamSettingsWindows
+        color: Material.background
+        Loader {
+            anchors.fill: parent
+            id: enhancementSettingsLoader
+            sourceComponent: enhancementSettingsDialogComponent
+        }
+    }
+    Rectangle {
         id: colorMappingSettingsRect
         anchors.top: parent.top
         anchors.horizontalCenter: parent.horizontalCenter
@@ -353,6 +406,36 @@ Item {
             anchors.fill: parent
             id: separateDisplaySettingsLoader
             sourceComponent: displaySettingsDialogComponent
+        }
+    }
+
+    Window {
+        id: separateEnhancementSettingsWindow
+        visible: useSeparateStreamSettingsWindows && enhancementSettingsRect.opacity > 0.0
+        transientParent: Chiaki.window
+        flags: Qt.Dialog | Qt.FramelessWindowHint
+        color: Material.background
+        modality: Qt.NonModal
+        x: Math.round(root.mapToGlobal(0, 0).x)
+        y: Math.round(root.mapToGlobal(0, 0).y)
+        width: Math.round(root.width)
+        height: separateEnhancementSettingsLoader.item ? Math.min(Math.round(root.height), Math.round(separateEnhancementSettingsLoader.item.gridHeight + 140)) : 560
+        onVisibleChanged: if (visible) requestActivate()
+
+        Shortcut {
+            sequence: "Ctrl+O"
+            onActivated: root.closeDialog()
+        }
+
+        Shortcut {
+            sequence: StandardKey.Cancel
+            onActivated: root.closeDialog()
+        }
+
+        Loader {
+            anchors.fill: parent
+            id: separateEnhancementSettingsLoader
+            sourceComponent: enhancementSettingsDialogComponent
         }
     }
 
@@ -595,6 +678,11 @@ Item {
     Component {
         id: displaySettingsDialogComponent
         DisplaySettingsDialog { }
+    }
+
+    Component {
+        id: enhancementSettingsDialogComponent
+        EnhancementSettingsDialog { }
     }
 
     Component {

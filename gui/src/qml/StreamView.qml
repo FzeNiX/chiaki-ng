@@ -749,16 +749,7 @@ Item {
                 icon.source: "qrc:/icons/settings-20px.svg";
                 onClicked: root.openDisplaySettings()
                 KeyNavigation.left: customButton
-                KeyNavigation.right: {
-                    if(Chiaki.window.videoPreset == ChiakiWindow.VideoPreset.Custom)
-                        placeboSettingsButton;
-                    else if (rtxVsrToggleButton.visible)
-                        rtxVsrToggleButton;
-                    else if (frameGenToggleButton.visible)
-                        frameGenToggleButton;
-                    else
-                        displaySettingsButton;
-                }
+                KeyNavigation.right: Chiaki.window.videoPreset == ChiakiWindow.VideoPreset.Custom ? placeboSettingsButton : enhancementSettingsButton
                 Keys.onReturnPressed: {
                     menuController.close();
                     clicked();
@@ -774,7 +765,7 @@ Item {
                 checkable: false
                 onClicked: root.openPlaceboSettings()
                 KeyNavigation.left: displaySettingsButton
-                KeyNavigation.right: rtxVsrToggleButton.visible ? rtxVsrToggleButton : frameGenToggleButton
+                KeyNavigation.right: enhancementSettingsButton
                 visible: Chiaki.window.videoPreset == ChiakiWindow.VideoPreset.Custom
                 Keys.onReturnPressed: {
                     menuController.close();
@@ -783,36 +774,19 @@ Item {
                 Keys.onEscapePressed: menuController.close()
             }
 
-            ToolSeparator {
-                Layout.leftMargin: -10
-                Layout.rightMargin: -10
-                visible: rtxVsrToggleButton.visible || frameGenToggleButton.visible
-            }
-
             ToolButton {
-                id: rtxVsrToggleButton
-                text: qsTr("RTX VSR")
+                id: enhancementSettingsButton
+                text: qsTr("Enhancement")
+                icon.source: "qrc:/icons/settings-20px.svg";
                 padding: 10
                 checkable: false
-                checked: Chiaki.settings.rtxVsrQuality > 0
-                visible: Chiaki.settings.rtxVsrSupported
-                onClicked: Chiaki.settings.toggleRtxVsr()
+                // RTX VSR, frame generation, RCAS and border fill while streaming.
+                onClicked: root.openEnhancementSettings()
                 KeyNavigation.left: placeboSettingsButton.visible ? placeboSettingsButton : displaySettingsButton
-                KeyNavigation.right: frameGenToggleButton
-                Keys.onReturnPressed: clicked()
-                Keys.onEscapePressed: menuController.close()
-            }
-
-            ToolButton {
-                id: frameGenToggleButton
-                text: qsTr("Frame Gen")
-                padding: 10
-                checkable: false
-                checked: Chiaki.settings.frameGenBackend > 0
-                visible: Chiaki.settings.frameGenSupported
-                onClicked: Chiaki.settings.toggleFrameGen()
-                KeyNavigation.left: rtxVsrToggleButton.visible ? rtxVsrToggleButton : (placeboSettingsButton.visible ? placeboSettingsButton : displaySettingsButton)
-                Keys.onReturnPressed: clicked()
+                Keys.onReturnPressed: {
+                    menuController.close();
+                    clicked();
+                }
                 Keys.onEscapePressed: menuController.close()
             }
             }
@@ -985,6 +959,10 @@ Item {
         onPlaceboSettingsRequested: {
             menuController.close();
             root.openPlaceboSettings();
+        }
+        onEnhancementSettingsRequested: {
+            menuController.close();
+            root.openEnhancementSettings();
         }
         onMainViewRequested: root.showMainView()
         onCloseAnimationFinished: {
