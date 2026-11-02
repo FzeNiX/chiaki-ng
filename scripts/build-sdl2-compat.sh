@@ -60,6 +60,11 @@ if [ ! -d "$DIR2" ]; then
 fi
 
 cd "$DIR2" || exit 1
+# sdl2-compat dlopen()s libSDL3.so.0 and the library's own RUNPATH is searched
+# first. A build RUNPATH pointing at the build machine's SDL3 directory
+# (/usr/lib/x86_64-linux-gnu) made the AppImage load the host's SDL3 instead of
+# the bundled one, and sdl2-compat aborts at startup when that one is too old.
+# Without it, packaging (linuxdeploy) sets $ORIGIN and the bundled SDL3 is used.
 INSTALL_PREFIX="${INSTALL_PREFIX:=/usr}"
 WINDOWS_ARM_CMAKE_ARGS=()
 WINDOWS_ARM_SHARED_LINKER_FLAGS=()
@@ -85,6 +90,8 @@ cmake \
     -DCMAKE_INSTALL_PREFIX="$INSTALL_PREFIX" \
     -DCMAKE_PREFIX_PATH="$INSTALL_PREFIX" \
     -DSDL2COMPAT_TESTS=OFF \
+    -DCMAKE_SKIP_BUILD_RPATH=ON \
+    -DCMAKE_SKIP_INSTALL_RPATH=ON \
     "${WINDOWS_ARM_CMAKE_ARGS[@]}" \
     "${WINDOWS_ARM_SHARED_LINKER_FLAGS[@]}"
 
