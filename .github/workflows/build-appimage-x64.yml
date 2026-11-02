@@ -8,6 +8,11 @@ on:
     branches:
       - claude/happy-gauss-7i9rwm
 
+# A newer push to the same branch supersedes a running build.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build-appimage_x64:
     name: Build chiaki-ng appimage_x64

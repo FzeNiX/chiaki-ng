@@ -8,6 +8,11 @@ on:
     branches:
       - claude/happy-gauss-7i9rwm
 
+# A newer push to the same branch supersedes a running build.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build-win_x64:
     name: Build chiaki-ng win_x64 (VC)
@@ -144,8 +149,9 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: vcpkg-binary-cache
-          key: vcpkg-bin-${{ runner.os }}-${{ env.triplet }}-${{ env.vcpkg_baseline }}-${{ hashFiles('vcpkg.json') }}
+          key: vcpkg-bin-${{ runner.os }}-${{ env.triplet }}-${{ env.vcpkg_baseline }}-${{ hashFiles('vcpkg.json') }}-${{ github.run_id }}
           restore-keys: |
+            vcpkg-bin-${{ runner.os }}-${{ env.triplet }}-${{ env.vcpkg_baseline }}-${{ hashFiles('vcpkg.json') }}-
             vcpkg-bin-${{ runner.os }}-${{ env.triplet }}-${{ env.vcpkg_baseline }}-
 
       - name: Setup vcpkg
@@ -156,12 +162,16 @@ jobs:
           vcpkgJsonGlob: "vcpkg.json"
 
       # Saved right away so later failures in the job still keep the packages.
+      # Cache keys are immutable, so a fixed key never picked up packages built
+      # on a runner image whose compiler/SDK changed the vcpkg ABI hash (those
+      # runs rebuilt everything, 30+ min). Save under a per-run key and restore
+      # the newest by prefix: the cache accumulates packages for every image.
       - name: Save vcpkg binary cache
         if: always()
         uses: actions/cache/save@v4
         with:
           path: vcpkg-binary-cache
-          key: vcpkg-bin-${{ runner.os }}-${{ env.triplet }}-${{ env.vcpkg_baseline }}-${{ hashFiles('vcpkg.json') }}
+          key: vcpkg-bin-${{ runner.os }}-${{ env.triplet }}-${{ env.vcpkg_baseline }}-${{ hashFiles('vcpkg.json') }}-${{ github.run_id }}
 
       - name: Build libplacebo
         run: |
