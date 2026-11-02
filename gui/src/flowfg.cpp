@@ -312,6 +312,10 @@ struct FlowInterpolator::Impl
     int final_index = 0;
     bool have_temporal = false;
     pl_tex stats = nullptr;
+    // Bound where a pass needs no input (every descriptor of a pass must be
+    // a distinct texture).
+    pl_tex dummy = nullptr;
+    bool duplicate_warned = false;
 
     std::vector<pl_timer> timers;
     int timer_cursor = 0;
@@ -352,6 +356,7 @@ void FlowInterpolator::Impl::destroyTextures()
     for (auto &tex : final_flow)
         pl_tex_destroy(gpu, &tex);
     pl_tex_destroy(gpu, &stats);
+    pl_tex_destroy(gpu, &dummy);
     width = height = levels = 0;
     have_temporal = false;
 }
@@ -390,7 +395,8 @@ bool FlowInterpolator::Impl::ensureSize(int w, int h)
             return false;
     }
     stats = makeTex(1, 1);
-    if (!stats)
+    dummy = makeTex(1, 1);
+    if (!stats || !dummy)
         return false;
     width = w;
     height = h;
@@ -434,6 +440,18 @@ bool FlowInterpolator::Impl::run(const char *description, const char *header, co
                                  std::initializer_list<struct pl_shader_var> vars,
                                  int w, int h, int group)
 {
+    // libplacebo rejects (and logs with a backtrace, every frame) a pass that
+    // binds the same texture twice; catch it here instead.
+    for (auto a = descs.begin(); a != descs.end(); ++a) {
+        for (auto b = descs.begin(); b != a; ++b) {
+            if (a->binding.object == b->binding.object) {
+                if (!duplicate_warned)
+                    qCWarning(chiakiGui) << "[framegen] Flow shader binds a texture twice:" << description;
+                duplicate_warned = true;
+                return false;
+            }
+        }
+    }
     pl_shader sh = pl_dispatch_begin(dp);
     struct pl_custom_shader params = {};
     params.description = description;
@@ -579,7 +597,7 @@ bool FlowInterpolator::interpolate(pl_tex prev, pl_tex cur, pl_tex const *output
         const float has_coarse = coarsest ? 0.0f : 1.0f;
         const float has_temporal = (l == 0 && d.have_temporal) ? 1.0f : 0.0f;
         const int radius = kCoarseRadius;
-        pl_tex coarse = coarsest ? prev_pyr->luma[li] : d.flow[li + 1];
+        pl_tex coarse = coarsest ? d.dummy : d.flow[li + 1];
         pl_tex temporal = d.final_flow[static_cast<size_t>(d.final_index)];
         if (!d.run("flow search", kSearchHeader, kSearchBody,
                    { sampledDesc("fgPrevL", prev_pyr->luma[li]), sampledDesc("fgCurL", cur_pyr.luma[li]),
