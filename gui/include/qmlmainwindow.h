@@ -320,6 +320,9 @@ private:
     bool is_window_adjustable = false;
     bool is_stream_window_adjustable = false;
     QAtomicInteger<int> dropped_frames_current = 0;
+    // Render thread only: the "Failed to start Placebo frame" warning was
+    // already logged for the current hidden/minimized period.
+    bool start_frame_hidden_logged = false;
     // Frames decoded from the stream / frames handed to the swapchain, counted
     // between two ticks of the 1 s stats timer.
     QAtomicInteger<int> stream_frames_current = 0;
