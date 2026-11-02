@@ -192,17 +192,43 @@ imageStore(fgDst, ivec2(0), vec4(sum / count, bad / count, 0.0, 1.0));
 const char *kSynthHeader = R"GLSL(
 float flow_luma(vec3 c) { return dot(c, vec3(0.2126, 0.7152, 0.0722)); }
 
-void flow_pick(vec2 c, vec2 v, vec2 vb, vec2 inv, inout vec3 best_a, inout vec3 best_b, inout float best_err)
+float flow_diff(vec3 x, vec3 y)
+{
+    vec3 d = abs(x - y);
+    return (d.r + d.g + d.b) * (1.0 / 3.0);
+}
+
+void flow_pick(vec2 c, vec2 v, vec2 vb, vec2 inv, inout vec3 best_a, inout vec3 best_b, inout float best_err,
+               inout vec2 best_v)
 {
     vec3 a = textureLod(fgPrevC, (c - fgT * v) * inv, 0.0).rgb;
     vec3 b = textureLod(fgCurC, (c + (1.0 - fgT) * v) * inv, 0.0).rgb;
     vec3 d = abs(a - b);
     float err = (d.r + d.g + d.b) * (1.0 / 3.0) + 0.01 * min(length(v - vb) * 0.125, 1.0);
+    // A moving vector whose both ends land on content that does not change
+    // between the frames (a static overlay such as the HUD) only matches by
+    // accident; static content is explained by zero motion.
+    if (dot(v, v) > 0.25) {
+        float still_a = flow_diff(a, textureLod(fgCurC, (c - fgT * v) * inv, 0.0).rgb);
+        float still_b = flow_diff(b, textureLod(fgPrevC, (c + (1.0 - fgT) * v) * inv, 0.0).rgb);
+        if (max(still_a, still_b) < 0.008)
+            err += 0.15;
+    }
     if (err < best_err) {
         best_err = err;
         best_a = a;
         best_b = b;
+        best_v = v;
     }
+}
+
+// How much the pixel at `q` changes between the two frames; ~0 for HUD and
+// other overlays that stay in place.
+float flow_change(vec2 q, vec2 inv)
+{
+    vec3 x = textureLod(fgPrevC, q * inv, 0.0).rgb;
+    vec3 y = textureLod(fgCurC, q * inv, 0.0).rgb;
+    return flow_diff(x, y);
 }
 )GLSL";
 
@@ -223,20 +249,50 @@ if (st.x > 0.12 || st.y > 0.45) {
     vec3 a = vec3(0.0);
     vec3 b = vec3(0.0);
     float err = 1e9;
-    flow_pick(c, vb, vb, inv, a, b, err);
+    vec2 bv = vb;
+    flow_pick(c, vb, vb, inv, a, b, err, bv);
     ivec2 fp = ivec2(floor(fc - 0.5));
     ivec2 fmax = ivec2(fgFlowSize) - 1;
     for (int j = 0; j <= 1; j++)
         for (int i = 0; i <= 1; i++)
-            flow_pick(c, texelFetch(fgFlow, clamp(fp + ivec2(i, j), ivec2(0), fmax), 0).xy, vb, inv, a, b, err);
+            flow_pick(c, texelFetch(fgFlow, clamp(fp + ivec2(i, j), ivec2(0), fmax), 0).xy, vb, inv, a, b, err, bv);
     for (int j = -1; j <= 2; j += 3)
         for (int i = -1; i <= 2; i += 3)
-            flow_pick(c, texelFetch(fgFlow, clamp(fp + ivec2(i, j), ivec2(0), fmax), 0).xy, vb, inv, a, b, err);
+            flow_pick(c, texelFetch(fgFlow, clamp(fp + ivec2(i, j), ivec2(0), fmax), 0).xy, vb, inv, a, b, err, bv);
+    // Zero motion is always a candidate (static overlays, HUD).
+    flow_pick(c, vec2(0.0), vb, inv, a, b, err, bv);
     vec3 blended = mix(a, b, fgT);
     // Where no vector makes both frames agree (occlusions), lean on the
     // temporally nearer frame instead of blending two different surfaces.
     float w = smoothstep(0.06, 0.20, err);
-    res = mix(blended, fgT < 0.5 ? a : b, w);
+    // If one side of the warp lands on a static overlay (HUD) while this
+    // pixel moves, the surface behind it is only visible in the other frame.
+    float side_t = fgT;
+    if (w > 0.0) {
+        float change_a = flow_change(c - fgT * bv, inv);
+        float change_b = flow_change(c + (1.0 - fgT) * bv, inv);
+        // The sample on the overlay barely changes between the frames.
+        if (min(change_a, change_b) < 0.01 && abs(change_a - change_b) > 0.003)
+            side_t = change_a < change_b ? 1.0 : 0.0;
+    }
+    res = mix(blended, side_t < 0.5 ? a : b, w);
+
+    // Pixels that are the same in both frames (HUD, overlays, static
+    // scenery) keep their place: the 1/4 resolution analysis would otherwise
+    // drag them along with the motion of the surrounding blocks.
+    ivec2 pmax = ivec2(fgSize) - 1;
+    vec3 p0 = texelFetch(fgPrevC, p, 0).rgb;
+    vec3 c0 = texelFetch(fgCurC, p, 0).rgb;
+    float still = flow_diff(p0, c0);
+    still = max(still, flow_diff(texelFetch(fgPrevC, clamp(p + ivec2(1, 0), ivec2(0), pmax), 0).rgb,
+                                 texelFetch(fgCurC, clamp(p + ivec2(1, 0), ivec2(0), pmax), 0).rgb));
+    still = max(still, flow_diff(texelFetch(fgPrevC, clamp(p - ivec2(1, 0), ivec2(0), pmax), 0).rgb,
+                                 texelFetch(fgCurC, clamp(p - ivec2(1, 0), ivec2(0), pmax), 0).rgb));
+    still = max(still, flow_diff(texelFetch(fgPrevC, clamp(p + ivec2(0, 1), ivec2(0), pmax), 0).rgb,
+                                 texelFetch(fgCurC, clamp(p + ivec2(0, 1), ivec2(0), pmax), 0).rgb));
+    still = max(still, flow_diff(texelFetch(fgPrevC, clamp(p - ivec2(0, 1), ivec2(0), pmax), 0).rgb,
+                                 texelFetch(fgCurC, clamp(p - ivec2(0, 1), ivec2(0), pmax), 0).rgb));
+    res = mix(mix(p0, c0, fgT), res, smoothstep(0.006, 0.02, still));
 }
 imageStore(fgOutImg, p, vec4(res, 1.0));
 )GLSL";
