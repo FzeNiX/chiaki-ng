@@ -109,6 +109,7 @@ class QmlSettings : public QObject
 	Q_PROPERTY(bool frameGenSupported READ frameGenSupported CONSTANT)
 	Q_PROPERTY(bool frameGenDlssSupported READ frameGenDlssSupported CONSTANT)
 	Q_PROPERTY(bool frameGenFsrSupported READ frameGenFsrSupported CONSTANT)
+	Q_PROPERTY(bool frameGenFlowSupported READ frameGenFlowSupported CONSTANT)
 	Q_PROPERTY(bool placeboDeinterlaceEnabled READ placeboDeinterlaceEnabled WRITE setPlaceboDeinterlaceEnabled NOTIFY placeboDeinterlaceEnabledChanged)
 	Q_PROPERTY(int placeboDeinterlacePreset READ placeboDeinterlacePreset WRITE setPlaceboDeinterlacePreset NOTIFY placeboDeinterlacePresetChanged)
 	Q_PROPERTY(int placeboDeinterlaceAlgorithm READ placeboDeinterlaceAlgorithm WRITE setPlaceboDeinterlaceAlgorithm NOTIFY placeboDeinterlaceAlgorithmChanged)
@@ -370,6 +371,7 @@ public:
     bool frameGenSupported() const;
     bool frameGenDlssSupported() const;
     bool frameGenFsrSupported() const;
+    bool frameGenFlowSupported() const;
     void setPlaceboFrameMixer(int mixer);
 
     bool placeboDeinterlaceEnabled() const;

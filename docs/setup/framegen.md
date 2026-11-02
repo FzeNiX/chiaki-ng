@@ -1,17 +1,34 @@
 # Frame Generation
 
 chiaki-ng can generate extra frames between the frames sent by the console
-(for example 60 fps stream → 120 fps on a 120 Hz display). Two backends are
-available in Windows builds made by the `Build chiaki-ng Windows x86_64 (VC)`
-workflow:
+(for example 60 fps stream → 120 fps on a 120 Hz display). Three backends:
 
-| Backend | GPU | Multiplier |
-|---|---|---|
-| NVIDIA DLSS Frame Generation | GeForce RTX 40 series or newer | 2x (3x / 4x on RTX 50 series) |
-| AMD FSR 3.1 Frame Generation | any GPU with Vulkan | 2x |
+| Backend | Platforms | GPU | Multiplier |
+|---|---|---|---|
+| NVIDIA DLSS Frame Generation | Windows (VC build) | GeForce RTX 40 series or newer | 2x (3x / 4x on RTX 50 series) |
+| AMD FSR 3.1 Frame Generation | Windows (VC build) | any GPU with Vulkan | 2x |
+| Flow Frame Generation | Windows, Linux, Steam Deck | any GPU with Vulkan | 2x / 3x / 4x |
 
-Both runtimes (`nvngx_dlssg.dll`, `amd_fidelityfx_vk.dll`) ship next to
-`chiaki.exe`; nothing extra has to be downloaded.
+The DLSS and FSR runtimes (`nvngx_dlssg.dll`, `amd_fidelityfx_vk.dll`) ship
+next to `chiaki.exe`; nothing extra has to be downloaded. Flow is chiaki-ng's
+own interpolation and needs no runtime at all.
+
+### Flow
+
+Flow is built from libplacebo compute shaders, so it runs wherever the Vulkan
+renderer runs. For each stream frame it
+
+1. builds a luma pyramid (1/4 resolution and coarser),
+2. estimates motion coarse to fine with symmetric block matching (seeded by
+   the coarser level, neighbouring blocks and the previous frame's motion),
+3. removes outliers and checks for scene cuts,
+4. warps both stream frames along the motion to each in-between time and
+   blends them, picking per pixel the vector that makes both frames agree.
+   Where nothing agrees (areas being covered or revealed) it uses the
+   temporally nearer frame; across a scene cut it repeats the nearer frame.
+
+The overlay shows `Flow FG 2x` and its GPU time. Fast motion around object
+edges can show some smearing in the covered/revealed areas.
 
 ## Requirements
 
@@ -23,8 +40,8 @@ Both runtimes (`nvngx_dlssg.dll`, `amd_fidelityfx_vk.dll`) ship next to
 
 ## Usage
 
-Settings → Video → **Frame Generation**: pick DLSS or FSR, then the
-**Frame Generation Multiplier** (DLSS only). Works together with
+Settings → Video → **Frame Generation**: pick DLSS, FSR or Flow, then the
+**Frame Generation Multiplier** (DLSS and Flow). Works together with
 [RTX Video Super Resolution](rtxvideo.md): frames are upscaled first, then
 generated.
 

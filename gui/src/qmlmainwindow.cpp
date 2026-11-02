@@ -5365,8 +5365,9 @@ renderer_backend_ready:
         }
         const int fg_backend_status = fg_status_backend.loadRelaxed();
         if (fg_backend_status > 0 && frame_gen) {
-            QString part = fg_backend_status == static_cast<int>(FrameGen::Backend::Dlss)
-                ? QStringLiteral("DLSS FG") : QStringLiteral("FSR FG");
+            QString part = fg_backend_status == static_cast<int>(FrameGen::Backend::Dlss) ? QStringLiteral("DLSS FG")
+                : fg_backend_status == static_cast<int>(FrameGen::Backend::Flow) ? QStringLiteral("Flow FG")
+                : QStringLiteral("FSR FG");
             const int multiplier = fg_status_multiplier.loadRelaxed();
             if (multiplier > 1) {
                 part += QStringLiteral(" %1x").arg(multiplier);

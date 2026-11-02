@@ -60,6 +60,8 @@ set(SOURCE_FILES
 	src/rtxvsr.cpp
 	include/framegen.h
 	src/framegen.cpp
+	include/flowfg.h
+	src/flowfg.cpp
 	include/systemdinhibit.h
 	src/systemdinhibit.cpp
 	)

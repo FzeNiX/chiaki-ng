@@ -19,6 +19,9 @@
 //    newer, up to 3 generated frames per real frame on RTX 50 series.
 //  - AMD FidelityFX FSR 3.1 frame generation (CHIAKI_HAVE_FFX), any GPU,
 //    1 generated frame per real frame.
+//  - Flow: chiaki-ng's own optical flow interpolation (FlowInterpolator),
+//    built from libplacebo compute shaders. Always available, any GPU and
+//    OS (Windows, Linux, Steam Deck), up to 3 generated frames per real frame.
 class FrameGen
 {
 public:
@@ -26,6 +29,7 @@ public:
         None = 0,
         Dlss = 1,
         Fsr = 2,
+        Flow = 3,
     };
 
     static bool compiledIn();

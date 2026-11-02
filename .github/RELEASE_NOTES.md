@@ -8,7 +8,7 @@ Fork of chiaki-ng 1.10.0 with NVIDIA RTX Video Super Resolution, Frame Generatio
 | `chiaki-ng-*-linux_x86_64.AppImage` | Linux x86_64 (`chmod +x`, then run) |
 | `SHA256SUMS.txt` | checksums |
 
-RTX Video Super Resolution and Frame Generation are **Windows only**. The Linux build has the general fixes, the FPS stats and the disconnect dialog changes.
+RTX Video Super Resolution, DLSS and FSR Frame Generation are **Windows only**. **Flow Frame Generation works on Windows and Linux** (any GPU, incl. Steam Deck). The Linux build also has the general fixes, the FPS stats and the disconnect dialog changes.
 
 ## New
 - **RTX Video Super Resolution** (NVIDIA RTX 20+, Vulkan renderer): AI upscaling of the stream to the window size, modes Low / Medium / High / Ultra.
@@ -16,6 +16,7 @@ RTX Video Super Resolution and Frame Generation are **Windows only**. The Linux 
 - **Frame Generation**, backend chosen in Settings:
   - **DLSS Frame Generation** (NVIDIA RTX 40/50), 2x–4x
   - **FSR 3.1 Frame Generation** (any Vulkan GPU), 2x
+  - **Flow Frame Generation** (any Vulkan GPU, Windows + Linux), 2x–4x – chiaki-ng's own optical flow interpolation, no extra runtime
 
   Needs Frame Mapping = Direct Mapping and a display running at least twice the stream frame rate (e.g. 120 Hz for 60 fps).
 - **Stream menu (Ctrl+O)**: switch RTX VSR and Frame Gen on/off while streaming.

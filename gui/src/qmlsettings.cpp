@@ -1024,7 +1024,7 @@ void QmlSettings::toggleFrameGen()
     }
     int backend = settings->GetFrameGenLastBackend();
     if (!backend || !FrameGen::backendCompiledIn(static_cast<FrameGen::Backend>(backend)))
-        backend = FrameGen::backendCompiledIn(FrameGen::Backend::Dlss) ? 1 : 2;
+        backend = FrameGen::backendCompiledIn(FrameGen::Backend::Dlss) ? 1 : 3;
     setFrameGenBackend(backend);
 }
 
@@ -1077,6 +1077,11 @@ bool QmlSettings::frameGenSupported() const
 bool QmlSettings::frameGenDlssSupported() const
 {
     return FrameGen::backendCompiledIn(FrameGen::Backend::Dlss);
+}
+
+bool QmlSettings::frameGenFlowSupported() const
+{
+    return FrameGen::backendCompiledIn(FrameGen::Backend::Flow);
 }
 
 bool QmlSettings::frameGenFsrSupported() const

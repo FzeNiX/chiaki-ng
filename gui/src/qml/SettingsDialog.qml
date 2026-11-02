@@ -1051,11 +1051,12 @@ DialogView {
                         enabled: Chiaki.settings.directFrameMapping
                         model: [qsTr("Off"),
                             Chiaki.settings.frameGenDlssSupported ? qsTr("NVIDIA DLSS Frame Generation") : qsTr("NVIDIA DLSS Frame Generation (not in this build)"),
-                            Chiaki.settings.frameGenFsrSupported ? qsTr("AMD FSR 3.1 Frame Generation") : qsTr("AMD FSR 3.1 Frame Generation (not in this build)")]
+                            Chiaki.settings.frameGenFsrSupported ? qsTr("AMD FSR 3.1 Frame Generation") : qsTr("AMD FSR 3.1 Frame Generation (not in this build)"),
+                            qsTr("Flow Frame Generation (any GPU)")]
                         currentIndex: Chiaki.settings.frameGenBackend
                         onActivated: index => Chiaki.settings.frameGenBackend = index
                         ToolTip.visible: hovered
-                        ToolTip.text: qsTr("Generates frames between stream frames for smoother motion (Vulkan renderer, Direct Mapping, SDR).\nAdds about half a stream frame of latency. DLSS needs an RTX 40 series or newer GPU.")
+                        ToolTip.text: qsTr("Generates frames between stream frames for smoother motion (Vulkan renderer, Direct Mapping, SDR).\nAdds about half a stream frame of latency. DLSS needs an RTX 40 series or newer GPU.\nFlow is chiaki-ng's own optical flow interpolation: any GPU, Windows and Linux (incl. Steam Deck), up to 4x.")
                     }
 
                     Label {
@@ -1073,9 +1074,9 @@ DialogView {
                     C.ComboBox {
                         Layout.preferredWidth: 400
                         visible: Chiaki.settings.frameGenSupported
-                        enabled: Chiaki.settings.frameGenBackend === 1
-                        model: [qsTr("2x"), qsTr("3x (RTX 50 series)"), qsTr("4x (RTX 50 series)")]
-                        currentIndex: Chiaki.settings.frameGenBackend === 1 ? Chiaki.settings.frameGenMultiplier - 2 : 0
+                        enabled: Chiaki.settings.frameGenBackend === 1 || Chiaki.settings.frameGenBackend === 3
+                        model: [qsTr("2x"), qsTr("3x (DLSS on RTX 50 series, Flow)"), qsTr("4x (DLSS on RTX 50 series, Flow)")]
+                        currentIndex: (Chiaki.settings.frameGenBackend === 1 || Chiaki.settings.frameGenBackend === 3) ? Chiaki.settings.frameGenMultiplier - 2 : 0
                         onActivated: index => Chiaki.settings.frameGenMultiplier = index + 2
                         ToolTip.visible: hovered
                         ToolTip.text: qsTr("Output frames per stream frame. FSR always uses 2x; the display refresh rate also limits it.")
